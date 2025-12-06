@@ -56,28 +56,30 @@ struct MyMessagesView: View {
     }
 
     private func loadMessages() async {
-        isLoading = true
-        errorMessage = nil
-        defer { isLoading = false }
+            isLoading = true
+            errorMessage = nil
+            defer { isLoading = false }
 
-        do {
-            let result = try await service.fetchMyMessages()
-            await MainActor.run {
-                self.messages = result
-            }
-        } catch MessageServiceError.notSignedIn {
-            await MainActor.run {
-                self.errorMessage = "ログインしていません。"
-            }
-        } catch {
-            // ここを追加
-            print("fetchMyMessages error: \(error)")
+            do {
+                let result = try await service.fetchMyMessages()
+                await MainActor.run {
+                    self.messages = result
+                }
+            } catch MessageServiceError.notSignedIn {
+                await MainActor.run {
+                    self.errorMessage = "ログインしていません。"
+                }
+            } catch {
+                // ★追加: ここでエラー内容をコンソールに出力します
+                print("==========================================")
+                print("自分の投稿 読み込みエラー詳細: \(error)")
+                print("==========================================")
 
-            await MainActor.run {
-                self.errorMessage = "読み込みに失敗しました。時間をおいて再度お試しください。"
+                await MainActor.run {
+                    self.errorMessage = "読み込みに失敗しました。時間をおいて再度お試しください。"
+                }
             }
         }
-    }
 
     private func delete(at offsets: IndexSet) {
         Task {

@@ -5,37 +5,71 @@ import PhotosUI
 struct NewMessageView: View {
     @Environment(\.dismiss) private var dismiss
 
-    @State private var keyword: String = ""
-    @State private var bodyText: String = ""
+    let editingMessage: Message?
+
+    @State private var keyword: String
+    @State private var bodyText: String
+    @State private var passcode: String = ""
+    @State private var is4DigitMode: Bool = false
+    
     @State private var isLoading = false
     @State private var errorMessage: String?
 
-    // 録音関連
     @State private var audioRecorder: AVAudioRecorder?
     @State private var isRecording = false
     @State private var recordedFileURL: URL?
-    @State private var audioPlayer: AVAudioPlayer?
+    
+    @State private var audioPlayer: AVPlayer?
     @State private var isPlayingPreview = false
     
-    // 複数画像用のState
+    @State private var isExistingVoiceDeleted = false
+    
     @State private var selectedPhotoItems: [PhotosPickerItem] = []
-    @State private var selectedImages: [UIImage] = []
+    @State private var newSelectedImages: [UIImage] = []
+    @State private var remainingImageUrls: [String] = []
 
     let service: MessageService
-    let onCreated: (Message) -> Void
+    let onCompleted: (Message) -> Void
+
+    init(service: MessageService, editingMessage: Message? = nil, onCompleted: @escaping (Message) -> Void) {
+        self.service = service
+        self.editingMessage = editingMessage
+        self.onCompleted = onCompleted
+        
+        _keyword = State(initialValue: editingMessage?.keyword ?? "")
+        _bodyText = State(initialValue: editingMessage?.body ?? "")
+        
+        if let message = editingMessage, let urls = message.image_urls {
+            _remainingImageUrls = State(initialValue: urls)
+        }
+        
+        if let message = editingMessage {
+            _is4DigitMode = State(initialValue: message.is_4_digit)
+            _passcode = State(initialValue: message.passcode == "000" ? "" : message.passcode)
+        }
+    }
+    
+    var isEditing: Bool { editingMessage != nil }
 
     var body: some View {
         ScrollView {
             VStack(spacing: 24) {
                 // --- 合言葉 ---
                 VStack(alignment: .leading, spacing: 8) {
-                    Text("合言葉")
-                        .font(.headline)
-                        .foregroundColor(.primary)
+                    HStack {
+                        Text("合言葉")
+                            .font(.headline)
+                            .foregroundColor(.primary)
+                        if isEditing {
+                            Text("（変更不可）")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        }
+                    }
                     
                     TextField("世界で一つだけ", text: $keyword)
                         .padding()
-                        .background(Color(uiColor: .systemBackground))
+                        .background(isEditing ? Color.gray.opacity(0.2) : Color(uiColor: .systemBackground))
                         .cornerRadius(8)
                         .overlay(
                             RoundedRectangle(cornerRadius: 8)
@@ -43,6 +77,7 @@ struct NewMessageView: View {
                         )
                         .textInputAutocapitalization(.never)
                         .disableAutocorrection(true)
+                        .disabled(isEditing)
                 }
 
                 // --- 内容 ---
@@ -60,7 +95,7 @@ struct NewMessageView: View {
                         }
                         
                         TextEditor(text: $bodyText)
-                            .frame(minHeight: 100)
+                            .frame(minHeight: 150)
                             .padding(4)
                             .overlay(
                                 RoundedRectangle(cornerRadius: 8)
@@ -69,40 +104,119 @@ struct NewMessageView: View {
                     }
                 }
                 
-                // --- 画像セクション（複数対応） ---
+                // --- パスコード設定 ---
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("暗証番号設定（奪い合い機能）")
+                        .font(.headline)
+                    
+                    if !is4DigitMode {
+                        HStack {
+                            Text("3桁（000〜999）")
+                                .font(.subheadline)
+                                .foregroundColor(.secondary)
+                            Spacer()
+                            Button {
+                                is4DigitMode = true
+                            } label: {
+                                Text("4桁に強化 (¥500)")
+                                    .font(.caption)
+                                    .fontWeight(.bold)
+                                    .padding(.horizontal, 12)
+                                    .padding(.vertical, 6)
+                                    .background(Color.orange)
+                                    .foregroundColor(.white)
+                                    .cornerRadius(20)
+                            }
+                        }
+                        TextField("例: 123", text: $passcode)
+                            .keyboardType(.numberPad)
+                            .textFieldStyle(.roundedBorder)
+                            .onChange(of: passcode) { _, val in
+                                if val.count > 3 { passcode = String(val.prefix(3)) }
+                            }
+                        Text("※ 当てられやすく、奪われる可能性があります")
+                            .font(.caption2)
+                            .foregroundColor(.red)
+                    } else {
+                        HStack {
+                            Text("🔒 4桁（0000〜9999）")
+                                .font(.subheadline)
+                                .fontWeight(.bold)
+                                .foregroundColor(.green)
+                            Spacer()
+                            Button("3桁に戻す") {
+                                is4DigitMode = false
+                                passcode = ""
+                            }
+                            .font(.caption)
+                        }
+                        TextField("例: 1234", text: $passcode)
+                            .keyboardType(.numberPad)
+                            .textFieldStyle(.roundedBorder)
+                            .onChange(of: passcode) { _, val in
+                                if val.count > 4 { passcode = String(val.prefix(4)) }
+                            }
+                        Text("※ セキュリティが強化されました")
+                            .font(.caption2)
+                            .foregroundColor(.green)
+                    }
+                }
+                .padding()
+                .background(Color(uiColor: .secondarySystemBackground))
+                .cornerRadius(8)
+                
+                // --- 画像セクション ---
                 VStack(alignment: .leading, spacing: 8) {
                     HStack {
                         Text("画像（最大5枚）")
                             .font(.headline)
                         Spacer()
-                        // 枚数表示
-                        if !selectedImages.isEmpty {
-                            Text("\(selectedImages.count) / 5")
+                        let totalCount = remainingImageUrls.count + newSelectedImages.count
+                        if totalCount > 0 {
+                            Text("\(totalCount) / 5")
                                 .font(.caption)
                                 .foregroundColor(.secondary)
                         }
                     }
                     
-                    if !selectedImages.isEmpty {
-                        // 横スクロールで選択した画像を表示
+                    if !remainingImageUrls.isEmpty || !newSelectedImages.isEmpty {
                         ScrollView(.horizontal, showsIndicators: false) {
                             HStack(spacing: 10) {
-                                ForEach(selectedImages.indices, id: \.self) { index in
+                                ForEach(remainingImageUrls, id: \.self) { urlString in
                                     ZStack(alignment: .topTrailing) {
-                                        Image(uiImage: selectedImages[index])
+                                        if let url = URL(string: urlString) {
+                                            AsyncImage(url: url) { image in
+                                                image.resizable().scaledToFill()
+                                            } placeholder: {
+                                                Color.gray.opacity(0.3)
+                                            }
+                                            .frame(width: 100, height: 100)
+                                            .clipped()
+                                            .cornerRadius(8)
+                                        }
+                                        
+                                        Button {
+                                            removeExistingImage(url: urlString)
+                                        } label: {
+                                            XMarkButton()
+                                        }
+                                        .padding(4)
+                                    }
+                                }
+                                
+                                ForEach(newSelectedImages.indices, id: \.self) { index in
+                                    ZStack(alignment: .topTrailing) {
+                                        Image(uiImage: newSelectedImages[index])
                                             .resizable()
                                             .scaledToFill()
                                             .frame(width: 100, height: 100)
                                             .clipped()
                                             .cornerRadius(8)
                                         
-                                        // 削除ボタン
                                         Button {
-                                            removeImage(at: index)
+                                            removeNewImage(at: index)
                                         } label: {
-                                            Image(systemName: "xmark.circle.fill")
-                                                .foregroundColor(.white)
-                                                .background(Color.black.opacity(0.5).clipShape(Circle()))
+                                            XMarkButton()
                                         }
                                         .padding(4)
                                     }
@@ -111,37 +225,27 @@ struct NewMessageView: View {
                         }
                     }
                     
-                    // 画像選択ボタン
+                    let totalCount = remainingImageUrls.count + newSelectedImages.count
                     PhotosPicker(
                         selection: $selectedPhotoItems,
-                        maxSelectionCount: 5,
+                        maxSelectionCount: 5 - totalCount,
                         matching: .images,
                         photoLibrary: .shared()
                     ) {
                         HStack {
                             Image(systemName: "photo.on.rectangle.angled")
-                            Text(selectedImages.isEmpty ? "画像を選択" : "画像を変更する")
+                            Text((remainingImageUrls.isEmpty && newSelectedImages.isEmpty) ? "画像を選択" : "画像を追加する")
                         }
                         .frame(maxWidth: .infinity)
                         .padding()
                         .background(Color(uiColor: .secondarySystemBackground))
                         .cornerRadius(8)
                     }
+                    .disabled(totalCount >= 5)
+                    .opacity(totalCount >= 5 ? 0.6 : 1.0)
                 }
-                .onChange(of: selectedPhotoItems) { newItems in
-                    Task {
-                        var loadedImages: [UIImage] = []
-                        for item in newItems {
-                            if let data = try? await item.loadTransferable(type: Data.self),
-                               let image = UIImage(data: data) {
-                                loadedImages.append(image)
-                            }
-                        }
-                        // メインスレッドで更新
-                        await MainActor.run {
-                            selectedImages = loadedImages
-                        }
-                    }
+                .onChange(of: selectedPhotoItems) { oldItems, newItems in
+                    loadNewImages(from: newItems)
                 }
                 
                 // --- ボイスメッセージ ---
@@ -149,59 +253,23 @@ struct NewMessageView: View {
                     Text("ボイスメッセージ（任意）")
                         .font(.headline)
                     
-                    HStack {
-                        if let _ = recordedFileURL {
-                            Button {
-                                if isPlayingPreview {
-                                    stopPlayback()
-                                } else {
-                                    startPlayback()
-                                }
-                            } label: {
-                                Image(systemName: isPlayingPreview ? "stop.circle.fill" : "play.circle.fill")
-                                    .resizable()
-                                    .frame(width: 44, height: 44)
-                                    .foregroundColor(.blue)
-                            }
-                            Text("録音済み")
-                                .font(.subheadline)
-                                .foregroundColor(.secondary)
-                            Spacer()
-                            Button(role: .destructive) {
-                                deleteRecording()
-                            } label: {
-                                Image(systemName: "trash")
-                                    .foregroundColor(.red)
-                            }
-                        } else {
-                            Button {
-                                if isRecording {
-                                    stopRecording()
-                                } else {
-                                    startRecording()
-                                }
-                            } label: {
-                                HStack {
-                                    Image(systemName: isRecording ? "stop.circle.fill" : "mic.circle.fill")
-                                        .resizable()
-                                        .frame(width: 44, height: 44)
-                                        .foregroundColor(isRecording ? .red : .blue)
-                                    if isRecording {
-                                        Text("録音中...")
-                                            .foregroundColor(.red)
-                                            .transition(.opacity)
-                                    } else {
-                                        Text("録音する")
-                                            .foregroundColor(.primary)
-                                    }
-                                }
-                            }
+                    if let _ = recordedFileURL {
+                        voicePlaybackView(title: "新規録音済み", onDelete: deleteRecording)
+                        
+                    } else if isEditing && editingMessage?.voice_url != nil && !isExistingVoiceDeleted {
+                        if let urlString = editingMessage?.voice_url, let url = URL(string: urlString) {
+                            voicePlaybackView(title: "既存のボイスあり", onDelete: {
+                                isExistingVoiceDeleted = true
+                            }, playUrl: url)
                         }
+                        
+                    } else {
+                        recordButtonView
                     }
-                    .padding()
-                    .background(Color(uiColor: .secondarySystemBackground))
-                    .cornerRadius(8)
                 }
+                .padding()
+                .background(Color(uiColor: .secondarySystemBackground))
+                .cornerRadius(8)
 
                 if let errorMessage {
                     Text(errorMessage)
@@ -213,17 +281,17 @@ struct NewMessageView: View {
             }
             .padding()
         }
-        .navigationTitle("新しいメッセージ")
+        .navigationTitle(isEditing ? "メッセージを編集" : "新しいメッセージ")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .navigationBarTrailing) {
                 Button {
-                    Task { await create() }
+                    Task { await submit() }
                 } label: {
                     if isLoading {
                         ProgressView()
                     } else {
-                        Text("投稿")
+                        Text(isEditing ? "更新" : "投稿")
                             .fontWeight(.bold)
                     }
                 }
@@ -233,20 +301,106 @@ struct NewMessageView: View {
         .onAppear {
             requestMicrophonePermission()
         }
+        .onDisappear {
+            audioPlayer?.pause()
+        }
     }
     
-    // 画像削除処理
-    private func removeImage(at index: Int) {
-        selectedImages.remove(at: index)
-        selectedPhotoItems.remove(at: index)
+    // MARK: - UI Components
+    
+    private func XMarkButton() -> some View {
+        Image(systemName: "xmark.circle.fill")
+            .foregroundColor(.white)
+            .background(Color.black.opacity(0.5).clipShape(Circle()))
+    }
+    
+    private func voicePlaybackView(title: String, onDelete: @escaping () -> Void, playUrl: URL? = nil) -> some View {
+        HStack {
+            Button {
+                if isPlayingPreview {
+                    stopPlayback()
+                } else {
+                    if let url = playUrl ?? recordedFileURL {
+                        startPlayback(url: url)
+                    }
+                }
+            } label: {
+                Image(systemName: isPlayingPreview ? "stop.circle.fill" : "play.circle.fill")
+                    .resizable()
+                    .frame(width: 44, height: 44)
+                    .foregroundColor(.blue)
+            }
+            Text(title)
+                .font(.subheadline)
+                .foregroundColor(.secondary)
+            Spacer()
+            Button(role: .destructive, action: onDelete) {
+                Image(systemName: "trash")
+                    .foregroundColor(.red)
+            }
+        }
+    }
+    
+    private var recordButtonView: some View {
+        Button {
+            if isRecording {
+                stopRecording()
+            } else {
+                startRecording()
+            }
+        } label: {
+            HStack {
+                Image(systemName: isRecording ? "stop.circle.fill" : "mic.circle.fill")
+                    .resizable()
+                    .frame(width: 44, height: 44)
+                    .foregroundColor(isRecording ? .red : .blue)
+                if isRecording {
+                    Text("録音中...")
+                        .foregroundColor(.red)
+                        .transition(.opacity)
+                } else {
+                    Text("録音する")
+                        .foregroundColor(.primary)
+                }
+            }
+        }
+    }
+    
+    // MARK: - Logic Methods
+    
+    private func removeExistingImage(url: String) {
+        remainingImageUrls.removeAll { $0 == url }
+    }
+    
+    private func removeNewImage(at index: Int) {
+        newSelectedImages.remove(at: index)
+        if index < selectedPhotoItems.count {
+            selectedPhotoItems.remove(at: index)
+        }
+    }
+    
+    private func loadNewImages(from items: [PhotosPickerItem]) {
+        Task {
+            var loadedImages: [UIImage] = []
+            for item in items {
+                if let data = try? await item.loadTransferable(type: Data.self),
+                   let image = UIImage(data: data) {
+                    loadedImages.append(image)
+                }
+            }
+            await MainActor.run {
+                newSelectedImages = loadedImages
+            }
+        }
     }
 
     private var canSubmit: Bool {
         !keyword.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
-        !bodyText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        !bodyText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
+        !passcode.isEmpty
     }
-
-    private func create() async {
+    
+    private func submit() async {
         errorMessage = nil
         isLoading = true
         defer { isLoading = false }
@@ -254,47 +408,74 @@ struct NewMessageView: View {
         let trimmedKeyword = keyword.trimmingCharacters(in: .whitespacesAndNewlines)
         let trimmedBody = bodyText.trimmingCharacters(in: .whitespacesAndNewlines)
 
-        var voiceData: Data? = nil
+        var newVoiceData: Data? = nil
         if let url = recordedFileURL, let data = try? Data(contentsOf: url) {
-            voiceData = data
+            newVoiceData = data
         }
         
-        // ★修正点: 複数画像のデータ変換
-        var imagesData: [Data] = []
-        for image in selectedImages {
+        var newImagesData: [Data] = []
+        for image in newSelectedImages {
             if let data = image.jpegData(compressionQuality: 0.8) {
-                imagesData.append(data)
+                newImagesData.append(data)
             }
         }
 
         do {
-            // ★修正点: 引数名を imagesData に変更し、配列を渡す
-            let message = try await service.createMessage(
-                keyword: trimmedKeyword,
-                body: trimmedBody,
-                voiceData: voiceData,
-                imagesData: imagesData
-            )
+            let resultMessage: Message
+            
+            if let editingMessage = editingMessage {
+                resultMessage = try await service.updateMessage(
+                    message: editingMessage,
+                    keyword: trimmedKeyword,
+                    body: trimmedBody,
+                    shouldDeleteVoice: isExistingVoiceDeleted,
+                    newVoiceData: newVoiceData,
+                    remainingImageUrls: remainingImageUrls,
+                    newImagesData: newImagesData,
+                    passcode: passcode,
+                    is4Digit: is4DigitMode
+                )
+            } else {
+                resultMessage = try await service.createMessage(
+                    keyword: trimmedKeyword,
+                    body: trimmedBody,
+                    voiceData: newVoiceData,
+                    imagesData: newImagesData,
+                    passcode: passcode,
+                    is4Digit: is4DigitMode
+                )
+            }
+            
             await MainActor.run {
-                onCreated(message)
+                onCompleted(resultMessage)
                 dismiss()
             }
         } catch MessageServiceError.keywordAlreadyExists {
             await MainActor.run {
                 errorMessage = "この合言葉はすでに使われています。別の合言葉を試してください。"
-            }
-        } catch {
-            await MainActor.run {
-                errorMessage = "投稿に失敗しました。時間をおいて再度お試しください。"
-            }
-        }
-    }
+                            }
+                        } catch {
+                            // ★修正: エラー内容を目立つようにコンソールに出力
+                            print("==========================================")
+                            print("投稿エラー詳細: \(error)")
+                            print("==========================================")
+
+                            await MainActor.run {
+                                errorMessage = "処理に失敗しました。時間をおいて再度お試しください。"
+                            }
+                        }
+                    }
     
-    // MARK: - Audio Logic (変更なし)
+    // MARK: - Audio Logic
     private func requestMicrophonePermission() {
         AVAudioSession.sharedInstance().requestRecordPermission { _ in }
     }
+    
     private func startRecording() {
+        if isEditing && editingMessage?.voice_url != nil {
+            isExistingVoiceDeleted = true
+        }
+        
         let audioSession = AVAudioSession.sharedInstance()
         do {
             try audioSession.setCategory(.playAndRecord, mode: .default)
@@ -307,14 +488,34 @@ struct NewMessageView: View {
             withAnimation { isRecording = true }
         } catch { print("録音開始エラー: \(error)") }
     }
+    
     private func stopRecording() {
         audioRecorder?.stop()
         withAnimation { isRecording = false; recordedFileURL = audioRecorder?.url }
     }
-    private func deleteRecording() { recordedFileURL = nil; audioRecorder = nil }
-    private func startPlayback() {
-        guard let url = recordedFileURL else { return }
-        do { audioPlayer = try AVAudioPlayer(contentsOf: url); audioPlayer?.play(); isPlayingPreview = true } catch { print("再生エラー: \(error)") }
+    
+    private func deleteRecording() {
+        recordedFileURL = nil
+        audioRecorder = nil
     }
-    private func stopPlayback() { audioPlayer?.stop(); isPlayingPreview = false }
+    
+    private func startPlayback(url: URL) {
+        let playerItem = AVPlayerItem(url: url)
+        if audioPlayer == nil {
+            audioPlayer = AVPlayer(playerItem: playerItem)
+        } else {
+            audioPlayer?.replaceCurrentItem(with: playerItem)
+        }
+        audioPlayer?.play()
+        isPlayingPreview = true
+        NotificationCenter.default.addObserver(forName: .AVPlayerItemDidPlayToEndTime, object: audioPlayer?.currentItem, queue: .main) { _ in
+            self.isPlayingPreview = false
+            self.audioPlayer?.seek(to: .zero)
+        }
+    }
+    
+    private func stopPlayback() {
+        audioPlayer?.pause()
+        isPlayingPreview = false
+    }
 }

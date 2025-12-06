@@ -15,6 +15,7 @@
 		AC2713482EE19ADB007C9A64 /* AuthView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC2713472EE19ADB007C9A64 /* AuthView.swift */; };
 		AC27134B2EE19C7D007C9A64 /* Supabase in Frameworks */ = {isa = PBXBuildFile; productRef = AC27134A2EE19C7D007C9A64 /* Supabase */; };
 		AC27134D2EE19E5C007C9A64 /* MyMessagesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC27134C2EE19E5C007C9A64 /* MyMessagesView.swift */; };
+		AC2713612EE40437007C9A64 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC2713602EE40437007C9A64 /* SettingsView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -24,6 +25,7 @@
 		AC27133D2EE12BC8007C9A64 /* MessageDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessageDetailView.swift; sourceTree = "<group>"; };
 		AC2713472EE19ADB007C9A64 /* AuthView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthView.swift; sourceTree = "<group>"; };
 		AC27134C2EE19E5C007C9A64 /* MyMessagesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MyMessagesView.swift; sourceTree = "<group>"; };
+		AC2713602EE40437007C9A64 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -74,6 +76,7 @@
 				AC27133D2EE12BC8007C9A64 /* MessageDetailView.swift */,
 				AC2713472EE19ADB007C9A64 /* AuthView.swift */,
 				AC27134C2EE19E5C007C9A64 /* MyMessagesView.swift */,
+				AC2713602EE40437007C9A64 /* SettingsView.swift */,
 			);
 			path = UI;
 			sourceTree = "<group>";
@@ -167,6 +170,7 @@
 			files = (
 				AC2713482EE19ADB007C9A64 /* AuthView.swift in Sources */,
 				AC27133C2EE12BA2007C9A64 /* NewMessageView.swift in Sources */,
+				AC2713612EE40437007C9A64 /* SettingsView.swift in Sources */,
 				AC27133A2EE12B85007C9A64 /* RootView.swift in Sources */,
 				AC27133E2EE12BC8007C9A64 /* MessageDetailView.swift in Sources */,
 				AC27134D2EE19E5C007C9A64 /* MyMessagesView.swift in Sources */,
@@ -302,6 +306,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = WM7939G226;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "ボイスメッセージを録音するために使用します";
@@ -311,6 +316,7 @@
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -339,6 +345,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = WM7939G226;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "ボイスメッセージを録音するために使用します";
@@ -348,6 +355,7 @@
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
