@@ -11,17 +11,18 @@ struct RootView: View {
     
     // MARK: - Navigation State
     @State private var foundMessage: Message?
+    
+    // 1. 自分の投稿 → 詳細画面へ遷移
     @State private var navigateToFoundMessage = false
+    
+    // 2. 他人の投稿 → プレビューシートを表示
     @State private var showingPreviewSheet = false
     
+    // 新規作成時用
     @State private var justCreatedMessage: Message?
     @State private var navigateToCreatedMessage = false
     
-    // MARK: - Unlock / Steal State
-    @State private var showingUnlockAlert = false
-    @State private var unlockInput = ""
-    @State private var unlockMessageId: UUID?
-    @State private var unlockErrorMessage: String?
+    // ※「奪う画面」用のStateは PreviewMessageView に移動したので削除しました
 
     private let service = MessageService()
     
@@ -50,7 +51,6 @@ struct RootView: View {
                 }
                 .disabled(keyword.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
 
-                // エラーメッセージ表示
                 if let errorMessage {
                     Text(errorMessage)
                         .foregroundColor(.red)
@@ -64,14 +64,9 @@ struct RootView: View {
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
                     HStack(spacing: 20) {
-                        
-                        NavigationLink {
-                            SettingsView()
-                        } label: {
-                            Image(systemName: "gearshape.fill")
-                                .foregroundColor(.primary)
+                        NavigationLink { SettingsView() } label: {
+                            Image(systemName: "gearshape.fill").foregroundColor(.primary)
                         }
-
                         NavigationLink {
                             NewMessageView(service: service) { created in
                                 justCreatedMessage = created
@@ -83,120 +78,34 @@ struct RootView: View {
                         } label: {
                             Image(systemName: "plus")
                         }
-                        
-                        NavigationLink {
-                            MyMessagesView()
-                        } label: {
+                        NavigationLink { MyMessagesView() } label: {
                             Image(systemName: "person.fill")
                         }
                     }
                 }
             }
-            // MARK: - Navigation Destinations
-            
+            // 自分の投稿が見つかった時の遷移
             .navigationDestination(isPresented: $navigateToFoundMessage) {
                 if let message = foundMessage {
                     MessageDetailView(message: message, service: service, allowDelete: false)
                 }
             }
-            
+            // 新規作成時の遷移
             .navigationDestination(isPresented: $navigateToCreatedMessage) {
                 if let message = justCreatedMessage {
                     MessageDetailView(message: message, service: service, allowDelete: true)
                 }
             }
-            
-            // MARK: - Preview Sheet (他人の投稿)
+            // ★修正: 他人の投稿が見つかった時のシート
+            // 中身を新しい PreviewMessageView に置き換えました
             .sheet(isPresented: $showingPreviewSheet) {
                 if let message = foundMessage {
-                    VStack(spacing: 24) {
-                        // ハンドルバー
-                        Capsule()
-                            .fill(Color.secondary.opacity(0.3))
-                            .frame(width: 40, height: 5)
-                            .padding(.top, 10)
-                        
-                        // 題名
-                        Text(message.keyword)
-                            .font(.largeTitle)
-                            .fontWeight(.bold)
-                            .multilineTextAlignment(.center)
-                        
-                        // 閲覧数
-                        HStack {
-                            Image(systemName: "eye.fill")
-                            Text("\(message.view_count)")
-                        }
-                        .foregroundColor(.secondary)
-                        .font(.subheadline)
-                        
-                        Divider()
-                        
-                        // 内容（スクロール可能に）
-                        ScrollView {
-                            Text(message.body)
-                                .font(.body)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                                .padding()
-                        }
-                        .frame(maxHeight: 200)
-                        .background(Color(uiColor: .secondarySystemBackground))
-                        .cornerRadius(12)
-                        
-                        Divider()
-                        
-                        // 奪うボタン（鍵マーク）
-                        Button {
-                            unlockInput = ""
-                            unlockMessageId = message.id
-                            unlockErrorMessage = nil
-                            showingUnlockAlert = true
-                        } label: {
-                            VStack(spacing: 4) {
-                                Image(systemName: "lock.fill")
-                                    .font(.system(size: 40))
-                                    .foregroundColor(message.is_4_digit ? .green : .orange)
-                                
-                                Text("この投稿を奪う")
-                                    .font(.headline)
-                                    .fontWeight(.bold)
-                                    .foregroundColor(.primary)
-                                
-                                Text(message.is_4_digit ? "4桁の暗証番号" : "3桁の暗証番号")
-                                    .font(.caption)
-                                    .foregroundColor(.secondary)
-                            }
-                            .frame(maxWidth: .infinity)
-                            .padding()
-                            .background(Color(uiColor: .systemBackground))
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 16)
-                                    .stroke(message.is_4_digit ? Color.green : Color.orange, lineWidth: 2)
-                            )
-                        }
-                        
-                        Spacer()
-                    }
-                    .padding()
-                    .presentationDetents([.medium, .large])
-                }
-            }
-            
-            // MARK: - Unlock Alert
-            .alert("暗証番号を入力", isPresented: $showingUnlockAlert) {
-                TextField("番号", text: $unlockInput)
-                    .keyboardType(.numberPad)
-                Button("キャンセル", role: .cancel) { }
-                Button("解除に挑戦") {
-                    Task {
-                        await attemptUnlock()
-                    }
-                }
-            } message: {
-                if let err = unlockErrorMessage {
-                    Text(err)
-                } else {
-                    Text("1日1回のみ挑戦できます。\n正解すると投稿を奪えます。")
+                    PreviewMessageView(
+                        message: message,
+                        service: service,
+                        rootKeyword: $keyword,        // 成功時に消すために渡す
+                        isPresented: $showingPreviewSheet // 閉じるために渡す
+                    )
                 }
             }
         }
@@ -215,59 +124,32 @@ struct RootView: View {
         guard !trimmed.isEmpty else { return }
 
         do {
-            let message = try await service.fetchMessage(by: trimmed)
+            var message = try await service.fetchMessage(by: trimmed)
             
             await MainActor.run {
-                foundMessage = message
-                
-                // 所有権チェックで動きを分岐
                 if service.isOwner(of: message) {
-                    // 自分の投稿なら → 詳細画面へ移動
+                    // 自分の投稿 → 詳細画面へ
+                    foundMessage = message
                     navigateToFoundMessage = true
                 } else {
-                    // 他人の投稿なら → 下からシートを表示
+                    // 他人の投稿 → 閲覧数+1 してプレビューシートへ
+                    Task {
+                        await service.incrementViewCount(for: message.id)
+                    }
+                    message.view_count += 1
+                    foundMessage = message
+                    
                     showingPreviewSheet = true
                 }
             }
         } catch MessageServiceError.notFound {
-                    await MainActor.run { errorMessage = "見つかりません（または隠されています）" }
-                } catch {
-                    // ★追加: エラーの正体をコンソールに出す
-                    print("==========================================")
-                    print("検索エラー詳細: \(error)")
-                    print("==========================================")
-                    
-                    await MainActor.run { errorMessage = "エラーが発生しました" }
-                }
-            }
-    
-    // ロック解除（奪う）処理
-    private func attemptUnlock() async {
-        guard let messageId = unlockMessageId else { return }
-        unlockErrorMessage = nil
-        
-        do {
-            let result = try await service.attemptSteal(messageId: messageId, guess: unlockInput)
-            
             await MainActor.run {
-                if result == "success" {
-                    // 成功したらシートを閉じる
-                    showingPreviewSheet = false
-                    foundMessage = nil
-                    unlockInput = ""
-                    showingUnlockAlert = false
-                } else if result == "limit_exceeded" {
-                    unlockErrorMessage = "本日の挑戦回数は終了しました。"
-                    showingUnlockAlert = true
-                } else {
-                    unlockErrorMessage = "番号が違います..."
-                    showingUnlockAlert = true
-                }
+                errorMessage = "見つかりません（または隠されています）"
             }
         } catch {
+            print("検索エラー詳細: \(error)")
             await MainActor.run {
-                unlockErrorMessage = "エラーが発生しました。"
-                showingUnlockAlert = true
+                errorMessage = "エラーが発生しました。時間をおいて再度お試しください。"
             }
         }
     }
