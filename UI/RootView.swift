@@ -21,8 +21,6 @@ struct RootView: View {
     // 新規作成時用
     @State private var justCreatedMessage: Message?
     @State private var navigateToCreatedMessage = false
-    
-    // ※「奪う画面」用のStateは PreviewMessageView に移動したので削除しました
 
     private let service = MessageService()
     
@@ -51,6 +49,7 @@ struct RootView: View {
                 }
                 .disabled(keyword.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
 
+                // エラーメッセージ表示
                 if let errorMessage {
                     Text(errorMessage)
                         .foregroundColor(.red)
@@ -64,9 +63,14 @@ struct RootView: View {
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
                     HStack(spacing: 20) {
-                        NavigationLink { SettingsView() } label: {
-                            Image(systemName: "gearshape.fill").foregroundColor(.primary)
+                        
+                        NavigationLink {
+                            SettingsView()
+                        } label: {
+                            Image(systemName: "gearshape.fill")
+                                .foregroundColor(.primary)
                         }
+
                         NavigationLink {
                             NewMessageView(service: service) { created in
                                 justCreatedMessage = created
@@ -78,24 +82,29 @@ struct RootView: View {
                         } label: {
                             Image(systemName: "plus")
                         }
-                        NavigationLink { MyMessagesView() } label: {
+                        
+                        NavigationLink {
+                            MyMessagesView()
+                        } label: {
                             Image(systemName: "person.fill")
                         }
                     }
                 }
             }
-            // 自分の投稿が見つかった時の遷移
+            // MARK: - Navigation Destinations
+            
             .navigationDestination(isPresented: $navigateToFoundMessage) {
                 if let message = foundMessage {
                     MessageDetailView(message: message, service: service, allowDelete: false)
                 }
             }
-            // 新規作成時の遷移
+            
             .navigationDestination(isPresented: $navigateToCreatedMessage) {
                 if let message = justCreatedMessage {
                     MessageDetailView(message: message, service: service, allowDelete: true)
                 }
             }
+            
             // ★修正: 他人の投稿が見つかった時のシート
             // 中身を新しい PreviewMessageView に置き換えました
             .sheet(isPresented: $showingPreviewSheet) {
@@ -103,8 +112,8 @@ struct RootView: View {
                     PreviewMessageView(
                         message: message,
                         service: service,
-                        rootKeyword: $keyword,        // 成功時に消すために渡す
-                        isPresented: $showingPreviewSheet // 閉じるために渡す
+                        rootKeyword: $keyword,
+                        isPresented: $showingPreviewSheet
                     )
                 }
             }
@@ -124,18 +133,19 @@ struct RootView: View {
         guard !trimmed.isEmpty else { return }
 
         do {
+            // ★変更: view_count を書き換えるため var に変更
             var message = try await service.fetchMessage(by: trimmed)
             
             await MainActor.run {
                 if service.isOwner(of: message) {
-                    // 自分の投稿 → 詳細画面へ
                     foundMessage = message
                     navigateToFoundMessage = true
                 } else {
-                    // 他人の投稿 → 閲覧数+1 してプレビューシートへ
+                    // ★追加: 他人の投稿ならここで閲覧数をカウントアップ
                     Task {
                         await service.incrementViewCount(for: message.id)
                     }
+                    // ★追加: 表示上の数字も増やしておく（リアルタイム反映）
                     message.view_count += 1
                     foundMessage = message
                     
@@ -147,10 +157,13 @@ struct RootView: View {
                 errorMessage = "見つかりません（または隠されています）"
             }
         } catch {
-            print("検索エラー詳細: \(error)")
             await MainActor.run {
                 errorMessage = "エラーが発生しました。時間をおいて再度お試しください。"
             }
         }
     }
+    
+    
+    // MARK: - Unused (削除可能)
+    // attemptUnlock メソッドは不要になったため削除
 }

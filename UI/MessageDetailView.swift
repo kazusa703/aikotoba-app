@@ -78,17 +78,10 @@ struct MessageDetailView: View {
             }
         }
         .onDisappear {
-            audioPlayer?.pause()
-        }
-        .task {
-            // 他人の投稿なら閲覧時にカウントアップ
-            if !service.isOwner(of: displayingMessage) {
-                await service.incrementViewCount(for: displayingMessage.id)
-                displayingMessage.view_count += 1
-            }
-        }
-        // --- Alerts & Sheets ---
-        .alert("コピーしました", isPresented: $showingCopyAlert) {
+                    audioPlayer?.pause()
+                }
+                // ★ .task ブロックを削除しました
+                .alert("コピーしました",  isPresented: $showingCopyAlert) {
             Button("OK", role: .cancel) { }
         }
         .alert("削除しますか？", isPresented: $showingDeleteAlert) {

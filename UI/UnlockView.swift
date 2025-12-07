@@ -102,11 +102,11 @@ struct UnlockView: View {
                     }
                 }
                 .alert("挑戦回数終了", isPresented: $showingLimitAlert) {
-                    Button("OK") {
-                        rootKeyword = "" // 失敗して諦める時もリセット
-                        dismiss()
-                    }
-                } message: {
+                                    Button("OK") {
+                                        // rootKeyword = ""  ← これを消します（検索ワードを消さない）
+                                        dismiss() // UnlockView だけを閉じてプレビューに戻る
+                                    }
+                                } message: {
                     Text("本日の挑戦回数は終了しました。\nまた明日挑戦してください。")
                 }
             }

@@ -1,4 +1,5 @@
 import SwiftUI
+import AVFoundation // ボイス再生に必要
 
 struct PreviewMessageView: View {
     // データ受け取り用
@@ -11,6 +12,10 @@ struct PreviewMessageView: View {
     
     // 奪う画面の表示フラグ
     @State private var showingUnlockView = false
+    
+    // ★追加: ボイス再生用
+    @State private var audioPlayer: AVPlayer?
+    @State private var isPlaying = false
 
     var body: some View {
         VStack(spacing: 24) {
@@ -38,12 +43,64 @@ struct PreviewMessageView: View {
             
             // 内容（スクロール可能）
             ScrollView {
-                Text(message.body)
-                    .font(.body)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding()
+                VStack(alignment: .leading, spacing: 20) {
+                    
+                    // ★追加: 画像表示（横スクロール）
+                    if let urls = message.image_urls, !urls.isEmpty {
+                        ScrollView(.horizontal, showsIndicators: false) {
+                            HStack(spacing: 12) {
+                                ForEach(urls, id: \.self) { urlString in
+                                    if let url = URL(string: urlString) {
+                                        AsyncImage(url: url) { phase in
+                                            switch phase {
+                                            case .empty:
+                                                Color.gray.opacity(0.3)
+                                            case .success(let image):
+                                                image.resizable().scaledToFill()
+                                            case .failure:
+                                                Color.gray.opacity(0.3)
+                                            @unknown default:
+                                                Color.gray.opacity(0.3)
+                                            }
+                                        }
+                                        .frame(width: 200, height: 150) // プレビューなので少し小さめに
+                                        .clipped()
+                                        .cornerRadius(12)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    
+                    // テキスト本文
+                    Text(message.body)
+                        .font(.body)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    
+                    // ★追加: ボイスメッセージ再生ボタン
+                    if let voiceUrl = message.voice_url, let url = URL(string: voiceUrl) {
+                        Button {
+                            toggleAudio(url: url)
+                        } label: {
+                            HStack {
+                                Image(systemName: isPlaying ? "pause.circle.fill" : "play.circle.fill")
+                                    .resizable()
+                                    .frame(width: 44, height: 44)
+                                    .foregroundColor(.blue)
+                                
+                                Text(isPlaying ? "再生中" : "ボイスを聞く")
+                                    .fontWeight(.bold)
+                                    .foregroundColor(.primary)
+                            }
+                        }
+                        .padding()
+                        .background(Color(uiColor: .secondarySystemBackground))
+                        .cornerRadius(12)
+                    }
+                }
+                .padding()
             }
-            .frame(maxHeight: 200)
+            .frame(maxHeight: 300) // 高さを少し広げました
             .background(Color(uiColor: .secondarySystemBackground))
             .cornerRadius(12)
             
@@ -79,7 +136,10 @@ struct PreviewMessageView: View {
             Spacer()
         }
         .padding()
-        .presentationDetents([.medium, .large]) // シートの高さ設定
+        // 画面が閉じるときに音声を止める
+        .onDisappear {
+            audioPlayer?.pause()
+        }
         // ★この画面の上から「奪う画面」を出す
         .fullScreenCover(isPresented: $showingUnlockView) {
             UnlockView(
@@ -88,11 +148,41 @@ struct PreviewMessageView: View {
                 rootKeyword: $rootKeyword
             )
             .onDisappear {
-                // 奪取成功または×ボタンで戻ってきた時、
-                // 検索ワードが空になっていたら、このプレビュー画面も閉じる
+                // 成功または諦めて×を押した（検索ワードが消えた）なら、このプレビューシートも閉じる
                 if rootKeyword.isEmpty {
                     isPresented = false
                 }
+            }
+        }
+    }
+    
+    // MARK: - Audio Logic
+    private func toggleAudio(url: URL) {
+        if isPlaying {
+            audioPlayer?.pause()
+            isPlaying = false
+        } else {
+            let item = AVPlayerItem(url: url)
+            if audioPlayer == nil {
+                audioPlayer = AVPlayer(playerItem: item)
+            } else {
+                audioPlayer?.replaceCurrentItem(with: item)
+            }
+            
+            if audioPlayer?.currentItem?.currentTime() == audioPlayer?.currentItem?.duration {
+                audioPlayer?.seek(to: .zero)
+            }
+            
+            audioPlayer?.play()
+            isPlaying = true
+            
+            NotificationCenter.default.addObserver(
+                forName: .AVPlayerItemDidPlayToEndTime,
+                object: audioPlayer?.currentItem,
+                queue: .main
+            ) { _ in
+                self.isPlaying = false
+                self.audioPlayer?.seek(to: .zero)
             }
         }
     }
