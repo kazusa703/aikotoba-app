@@ -49,7 +49,6 @@ struct RootView: View {
                 }
                 .disabled(keyword.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
 
-                // エラーメッセージ表示
                 if let errorMessage {
                     Text(errorMessage)
                         .foregroundColor(.red)
@@ -105,8 +104,7 @@ struct RootView: View {
                 }
             }
             
-            // ★修正: 他人の投稿が見つかった時のシート
-            // 中身を新しい PreviewMessageView に置き換えました
+            // MARK: - Preview Sheet (他人の投稿)
             .sheet(isPresented: $showingPreviewSheet) {
                 if let message = foundMessage {
                     PreviewMessageView(
@@ -115,10 +113,11 @@ struct RootView: View {
                         rootKeyword: $keyword,
                         isPresented: $showingPreviewSheet
                     )
+                    .presentationDetents([.medium, .large])
                 }
             }
-        }
-    }
+        } // End NavigationStack
+    } // End body
 
     // MARK: - Functions
 
@@ -133,19 +132,18 @@ struct RootView: View {
         guard !trimmed.isEmpty else { return }
 
         do {
-            // ★変更: view_count を書き換えるため var に変更
             var message = try await service.fetchMessage(by: trimmed)
             
             await MainActor.run {
                 if service.isOwner(of: message) {
+                    // 自分の投稿 → 詳細画面へ
                     foundMessage = message
                     navigateToFoundMessage = true
                 } else {
-                    // ★追加: 他人の投稿ならここで閲覧数をカウントアップ
+                    // 他人の投稿 → 閲覧数+1 してプレビューシートへ
                     Task {
                         await service.incrementViewCount(for: message.id)
                     }
-                    // ★追加: 表示上の数字も増やしておく（リアルタイム反映）
                     message.view_count += 1
                     foundMessage = message
                     
@@ -157,13 +155,10 @@ struct RootView: View {
                 errorMessage = "見つかりません（または隠されています）"
             }
         } catch {
+            print("検索エラー詳細: \(error)")
             await MainActor.run {
                 errorMessage = "エラーが発生しました。時間をおいて再度お試しください。"
             }
         }
     }
-    
-    
-    // MARK: - Unused (削除可能)
-    // attemptUnlock メソッドは不要になったため削除
 }

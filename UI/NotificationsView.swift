@@ -1,18 +1,46 @@
-//
-//  NotificationsView.swift
-//  aikotoba
-//
-//  Created by 今井一颯 on 2025/12/10.
-//
-
 import SwiftUI
 
 struct NotificationsView: View {
-    var body: some View {
-        Text(/*@START_MENU_TOKEN@*/"Hello, World!"/*@END_MENU_TOKEN@*/)
-    }
-}
+    @Environment(\.dismiss) private var dismiss
+    @State private var notifications: [AppNotification] = []
+    let service = MessageService()
 
-#Preview {
-    NotificationsView()
+    var body: some View {
+        NavigationStack {
+            List(notifications) { item in
+                VStack(alignment: .leading, spacing: 8) {
+                    Text(item.title)
+                        .font(.headline)
+                        .foregroundColor(.red) // 警告っぽく赤色に
+                    
+                    Text(item.body)
+                        .font(.subheadline)
+                        .foregroundColor(.primary)
+                    
+                    Text(item.created_at.formatted(date: .abbreviated, time: .shortened))
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+                .padding(.vertical, 4)
+            }
+            .navigationTitle("お知らせ")
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button("閉じる") { dismiss() }
+                }
+            }
+            .task {
+                do {
+                    notifications = try await service.fetchNotifications()
+                } catch {
+                    print("Notification error: \(error)")
+                }
+            }
+            .overlay {
+                if notifications.isEmpty {
+                    ContentUnavailableView("お知らせはありません", systemImage: "bell.slash")
+                }
+            }
+        }
+    }
 }

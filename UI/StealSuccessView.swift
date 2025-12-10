@@ -77,15 +77,21 @@ struct StealSuccessView: View {
             .foregroundColor(.secondary)
             .padding(.bottom)
         }
-        // ★自動設定の通知アラート
-        .alert("設定は未完了です", isPresented: $showingAutoSetAlert) {
-            Button("OK") {
-                rootKeyword = "" // 検索リセット
-                dismiss() // ホームに戻る
-            }
-        } message: {
-            Text("暗証番号は自動的に「000」に設定されました。\n現在は「非公開」状態です。\n\n再公開するには「自分の投稿」から編集してください。")
-        }
+        // ★自動設定の通知アラート（修正）
+                .alert("設定は未完了です", isPresented: $showingAutoSetAlert) {
+                    Button("わかった") { // ボタン名を「OK」から変更（ニュアンス調整）
+                        rootKeyword = ""
+                        dismiss()
+                    }
+                } message: {
+                    // ★ここを書き換え
+                    Text("""
+                    暗証番号は一時的に「000」に設定され、投稿は「非公開」になりました。
+                    
+                    ⚠️ 重要 ⚠️
+                    24時間以内に「自分の投稿」から編集して再公開しない場合、この投稿は【自動的に削除】され、合言葉の権利を失います。
+                    """)
+                }
         .interactiveDismissDisabled() // スワイプで閉じられないようにする
     }
     

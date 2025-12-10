@@ -19,6 +19,7 @@
 		AC739A532EE54CDD00FFD594 /* UnlockView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC739A522EE54CDD00FFD594 /* UnlockView.swift */; };
 		AC739A552EE54CF500FFD594 /* StealSuccessView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC739A542EE54CF500FFD594 /* StealSuccessView.swift */; };
 		AC739A572EE5528D00FFD594 /* PreviewMessageView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC739A562EE5528D00FFD594 /* PreviewMessageView.swift */; };
+		ACE941722EE9567600FD58B5 /* NotificationsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = ACE941712EE9567600FD58B5 /* NotificationsView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -32,6 +33,7 @@
 		AC739A522EE54CDD00FFD594 /* UnlockView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UnlockView.swift; sourceTree = "<group>"; };
 		AC739A542EE54CF500FFD594 /* StealSuccessView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StealSuccessView.swift; sourceTree = "<group>"; };
 		AC739A562EE5528D00FFD594 /* PreviewMessageView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PreviewMessageView.swift; sourceTree = "<group>"; };
+		ACE941712EE9567600FD58B5 /* NotificationsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationsView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -86,6 +88,7 @@
 				AC739A522EE54CDD00FFD594 /* UnlockView.swift */,
 				AC739A542EE54CF500FFD594 /* StealSuccessView.swift */,
 				AC739A562EE5528D00FFD594 /* PreviewMessageView.swift */,
+				ACE941712EE9567600FD58B5 /* NotificationsView.swift */,
 			);
 			path = UI;
 			sourceTree = "<group>";
@@ -181,6 +184,7 @@
 				AC739A572EE5528D00FFD594 /* PreviewMessageView.swift in Sources */,
 				AC27133C2EE12BA2007C9A64 /* NewMessageView.swift in Sources */,
 				AC2713612EE40437007C9A64 /* SettingsView.swift in Sources */,
+				ACE941722EE9567600FD58B5 /* NotificationsView.swift in Sources */,
 				AC27133A2EE12B85007C9A64 /* RootView.swift in Sources */,
 				AC27133E2EE12BC8007C9A64 /* MessageDetailView.swift in Sources */,
 				AC27134D2EE19E5C007C9A64 /* MyMessagesView.swift in Sources */,

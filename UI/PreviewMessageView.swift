@@ -1,5 +1,5 @@
 import SwiftUI
-import AVFoundation // ボイス再生に必要
+import AVFoundation
 
 struct PreviewMessageView: View {
     // データ受け取り用
@@ -13,9 +13,14 @@ struct PreviewMessageView: View {
     // 奪う画面の表示フラグ
     @State private var showingUnlockView = false
     
-    // ★追加: ボイス再生用
+    // ボイス再生用
     @State private var audioPlayer: AVPlayer?
     @State private var isPlaying = false
+    
+    // 通報用の状態
+    @State private var isReporting = false
+    @State private var reportAlertMessage: String?
+    @State private var showingReportAlert = false
 
     var body: some View {
         VStack(spacing: 24) {
@@ -31,10 +36,27 @@ struct PreviewMessageView: View {
                 .fontWeight(.bold)
                 .multilineTextAlignment(.center)
             
-            // 閲覧数
-            HStack {
-                Image(systemName: "eye.fill")
-                Text("\(message.view_count)")
+            // 閲覧数・奪取数・防衛数
+            HStack(spacing: 16) {
+                Spacer()
+                
+                // 閲覧数
+                HStack(spacing: 4) {
+                    Image(systemName: "eye.fill")
+                    Text("\(message.view_count)")
+                }
+                
+                // 奪われた回数
+                HStack(spacing: 4) {
+                    Text("🏴")
+                    Text("\(message.stolen_count)")
+                }
+                
+                // 防衛した回数
+                HStack(spacing: 4) {
+                    Text("💣")
+                    Text("\(message.failed_count)")
+                }
             }
             .foregroundColor(.secondary)
             .font(.subheadline)
@@ -45,7 +67,7 @@ struct PreviewMessageView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 20) {
                     
-                    // ★追加: 画像表示（横スクロール）
+                    // 画像表示（横スクロール）
                     if let urls = message.image_urls, !urls.isEmpty {
                         ScrollView(.horizontal, showsIndicators: false) {
                             HStack(spacing: 12) {
@@ -63,7 +85,7 @@ struct PreviewMessageView: View {
                                                 Color.gray.opacity(0.3)
                                             }
                                         }
-                                        .frame(width: 200, height: 150) // プレビューなので少し小さめに
+                                        .frame(width: 200, height: 150)
                                         .clipped()
                                         .cornerRadius(12)
                                     }
@@ -77,7 +99,7 @@ struct PreviewMessageView: View {
                         .font(.body)
                         .frame(maxWidth: .infinity, alignment: .leading)
                     
-                    // ★追加: ボイスメッセージ再生ボタン
+                    // ボイスメッセージ
                     if let voiceUrl = message.voice_url, let url = URL(string: voiceUrl) {
                         Button {
                             toggleAudio(url: url)
@@ -100,7 +122,7 @@ struct PreviewMessageView: View {
                 }
                 .padding()
             }
-            .frame(maxHeight: 300) // 高さを少し広げました
+            .frame(maxHeight: 300)
             .background(Color(uiColor: .secondarySystemBackground))
             .cornerRadius(12)
             
@@ -133,6 +155,21 @@ struct PreviewMessageView: View {
                 )
             }
             
+            // 通報ボタン
+            Button {
+                Task { await report() }
+            } label: {
+                if isReporting {
+                    ProgressView().font(.caption)
+                } else {
+                    Text("通報する")
+                        .font(.caption)
+                        .foregroundColor(.gray)
+                        .underline()
+                }
+            }
+            .padding(.top, 4)
+            
             Spacer()
         }
         .padding()
@@ -154,9 +191,16 @@ struct PreviewMessageView: View {
                 }
             }
         }
+        // 通報完了アラート
+        .alert("お知らせ", isPresented: $showingReportAlert) {
+            Button("OK", role: .cancel) { }
+        } message: {
+            Text(reportAlertMessage ?? "")
+        }
     }
     
-    // MARK: - Audio Logic
+    // MARK: - Logic Methods
+    
     private func toggleAudio(url: URL) {
         if isPlaying {
             audioPlayer?.pause()
@@ -183,6 +227,25 @@ struct PreviewMessageView: View {
             ) { _ in
                 self.isPlaying = false
                 self.audioPlayer?.seek(to: .zero)
+            }
+        }
+    }
+    
+    private func report() async {
+        guard !isReporting else { return }
+        isReporting = true
+        defer { isReporting = false }
+        
+        do {
+            try await service.reportMessage(message)
+            await MainActor.run {
+                reportAlertMessage = "通報を受け付けました。\nご協力ありがとうございます。"
+                showingReportAlert = true
+            }
+        } catch {
+            await MainActor.run {
+                reportAlertMessage = "通報に失敗しました。\n時間をおいて再度お試しください。"
+                showingReportAlert = true
             }
         }
     }

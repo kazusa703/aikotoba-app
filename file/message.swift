@@ -9,14 +9,17 @@ struct Message: Identifiable, Decodable, Sendable {
     let voice_url: String?
     let image_urls: [String]?
     
-    // 閲覧数はアプリ内で +1 するため var にしています
     var view_count: Int
+    
+    // ★追加: 新しいカウント
+    var stolen_count: Int
+    var failed_count: Int
 
-    // ★奪い合いゲーム機能用の項目
-    let creator_id: UUID? // 初代作成者のID
-    let passcode: String  // 設定された暗証番号
-    let is_4_digit: Bool  // 4桁モードかどうか
-    let is_hidden: Bool   // 一時的に非公開になっているか
+    let creator_id: UUID?
+    let passcode: String
+    let is_4_digit: Bool
+    let is_hidden: Bool
+    let user_id: UUID?
 
     enum CodingKeys: String, CodingKey {
         case id
@@ -25,17 +28,20 @@ struct Message: Identifiable, Decodable, Sendable {
         case ownerToken = "owner_token"
         case createdAt = "created_at"
         case voice_url
-        case image_urls
+        case image_urls = "image_urls"
         case view_count
         
-        // Supabaseのカラム名と一致させる
+        // ★追加
+        case stolen_count
+        case failed_count
+        
         case creator_id
         case passcode
         case is_4_digit
         case is_hidden
+        case user_id
     }
     
-    // ★カスタムデコード（日付形式やNULL許容に対応）
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         
@@ -46,15 +52,18 @@ struct Message: Identifiable, Decodable, Sendable {
         voice_url = try container.decodeIfPresent(String.self, forKey: .voice_url)
         image_urls = try container.decodeIfPresent([String].self, forKey: .image_urls)
         
-        // オプショナル値の安全なデコード（デフォルト値設定）
         view_count = try container.decodeIfPresent(Int.self, forKey: .view_count) ?? 0
+        
+        // ★追加: デフォルト値0でデコード
+        stolen_count = try container.decodeIfPresent(Int.self, forKey: .stolen_count) ?? 0
+        failed_count = try container.decodeIfPresent(Int.self, forKey: .failed_count) ?? 0
+        
         is_hidden = try container.decodeIfPresent(Bool.self, forKey: .is_hidden) ?? false
         is_4_digit = try container.decodeIfPresent(Bool.self, forKey: .is_4_digit) ?? false
         passcode = try container.decodeIfPresent(String.self, forKey: .passcode) ?? "000"
         creator_id = try container.decodeIfPresent(UUID.self, forKey: .creator_id)
+        user_id = try container.decodeIfPresent(UUID.self, forKey: .user_id)
         
-        // 日付のデコード（ISO8601形式対応）
-        // Supabaseはミリ秒を含む場合があるため、formatOptionsを指定
         let dateString = try container.decode(String.self, forKey: .createdAt)
         let formatter = ISO8601DateFormatter()
         formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
@@ -62,12 +71,10 @@ struct Message: Identifiable, Decodable, Sendable {
         if let date = formatter.date(from: dateString) {
             createdAt = date
         } else {
-            // ミリ秒がない場合のフォールバック
             formatter.formatOptions = [.withInternetDateTime]
             if let date = formatter.date(from: dateString) {
                 createdAt = date
             } else {
-                // 最終手段：現在時刻
                 createdAt = Date()
             }
         }

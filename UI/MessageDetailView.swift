@@ -126,14 +126,30 @@ struct MessageDetailView: View {
     func contentView(isOwner: Bool) -> some View {
         VStack(spacing: 16) {
             
-            // 閲覧数
-            HStack {
-                Spacer()
-                Image(systemName: "eye.fill")
-                Text("\(displayingMessage.view_count)")
-            }
-            .foregroundColor(.secondary)
-            .font(.caption)
+            // 閲覧数・奪取数・防衛数
+                        HStack(spacing: 16) { // 少し間隔を広めに
+                            Spacer()
+                            
+                            // 閲覧数
+                            HStack(spacing: 4) {
+                                Image(systemName: "eye.fill")
+                                Text("\(displayingMessage.view_count)")
+                            }
+                            
+                            // ★追加: 奪われた回数（フラッグ）
+                            HStack(spacing: 4) {
+                                Text("🏴") // SF Symbolsに良い旗がないため絵文字推奨
+                                Text("\(displayingMessage.stolen_count)")
+                            }
+                            
+                            // ★追加: 防衛した回数（爆弾）
+                            HStack(spacing: 4) {
+                                Text("💣")
+                                Text("\(displayingMessage.failed_count)")
+                            }
+                        }
+                        .foregroundColor(.secondary)
+                        .font(.subheadline) // 少し文字サイズを統一
             
             ScrollView {
                 VStack(alignment: .leading, spacing: 20) {
@@ -156,13 +172,19 @@ struct MessageDetailView: View {
                     
                     // 非公開警告（自分の場合のみ表示）
                     if isOwner && displayingMessage.is_hidden {
-                        Text("⚠️ 現在、この投稿は非公開です。再公開するには「編集」からパスコードを設定して更新してください。")
-                            .font(.caption)
-                            .foregroundColor(.orange)
-                            .padding(8)
-                            .background(Color.orange.opacity(0.1))
-                            .cornerRadius(8)
-                    }
+                                            // ★ここを書き換え
+                                            VStack(alignment: .leading, spacing: 4) {
+                                                Text("⚠️ 非公開 / 削除警告")
+                                                    .fontWeight(.bold)
+                                                Text("現在、この投稿は非公開です。\n奪取から24時間以内に「編集」でパスコードを設定して再公開しない場合、この投稿は自動削除されます。")
+                                            }
+                                            .font(.caption)
+                                            .foregroundColor(.orange)
+                                            .padding()
+                                            .frame(maxWidth: .infinity, alignment: .leading)
+                                            .background(Color.orange.opacity(0.1))
+                                            .cornerRadius(8)
+                                        }
 
                     // 画像（横スクロール）
                     if let urls = displayingMessage.image_urls, !urls.isEmpty {
@@ -255,28 +277,29 @@ struct MessageDetailView: View {
     // MARK: - Logic Methods
     
     private func attemptUnlock() async {
-        unlockErrorMessage = nil
-        
-        do {
-            let result = try await service.attemptSteal(messageId: displayingMessage.id, guess: unlockInput)
+            unlockErrorMessage = nil
             
-            if result == "success" {
-                // 成功したら画面を閉じる
-                await MainActor.run {
-                    dismiss()
+            do {
+                // ★修正: message.id ではなく displayingMessage.id を使います
+                let result = try await service.attemptSteal(messageId: displayingMessage.id, guess: unlockInput)
+                
+                if result == "success" {
+                    // 成功したら画面を閉じる
+                    await MainActor.run {
+                        dismiss()
+                    }
+                } else if result == "limit_exceeded" {
+                    unlockErrorMessage = "本日の挑戦回数は終了しました。"
+                    showingUnlockAlert = true
+                } else {
+                    unlockErrorMessage = "番号が違います..."
+                    showingUnlockAlert = true
                 }
-            } else if result == "limit_exceeded" {
-                unlockErrorMessage = "本日の挑戦回数は終了しました。"
-                showingUnlockAlert = true
-            } else {
-                unlockErrorMessage = "番号が違います..."
+            } catch {
+                unlockErrorMessage = "エラーが発生しました。"
                 showingUnlockAlert = true
             }
-        } catch {
-            unlockErrorMessage = "エラーが発生しました。"
-            showingUnlockAlert = true
         }
-    }
     
     private func report() async {
         guard !isReporting else { return }

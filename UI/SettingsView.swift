@@ -5,12 +5,24 @@ struct SettingsView: View {
     @EnvironmentObject var sessionStore: SessionStore
     @Environment(\.dismiss) private var dismiss
     
-    // 削除確認アラート用のフラグ
+    // ★追加: メールアドレス表示用
+    @State private var userEmail: String = "読み込み中..."
+    
     @State private var showingDeleteAlert = false
     @State private var isLoading = false
 
     var body: some View {
         List {
+            // ★追加: アカウント情報セクション
+            Section("アカウント情報") {
+                HStack {
+                    Text("メールアドレス")
+                    Spacer()
+                    Text(userEmail)
+                        .foregroundColor(.secondary)
+                }
+            }
+
             Section("法的情報") {
                 // ※URLは後で正しいものに変えてください
                 Link("利用規約", destination: URL(string: "https://google.com")!)
@@ -26,7 +38,7 @@ struct SettingsView: View {
                         await sessionStore.signOut()
                     }
                 }
-                .foregroundColor(.red) // ログアウトも少し目立たせる（お好みで）
+                .foregroundColor(.red)
             }
             
             Section {
@@ -43,6 +55,14 @@ struct SettingsView: View {
         }
         .navigationTitle("設定")
         .navigationBarTitleDisplayMode(.inline)
+        // ★追加: 画面が表示されたらメールアドレスを取得
+        .task {
+            if let user = SupabaseClientManager.shared.client.auth.currentUser {
+                self.userEmail = user.email ?? "不明"
+            } else {
+                self.userEmail = "未ログイン"
+            }
+        }
         // アカウント削除確認アラート
         .alert("アカウント削除", isPresented: $showingDeleteAlert) {
             Button("キャンセル", role: .cancel) { }
@@ -54,7 +74,7 @@ struct SettingsView: View {
         } message: {
             Text("本当に削除しますか？この操作は取り消せません。")
         }
-        // ローディング表示（削除処理中）
+        // ローディング表示
         .overlay {
             if isLoading {
                 ZStack {
@@ -74,24 +94,22 @@ struct SettingsView: View {
         defer { isLoading = false }
         
         do {
-            // ステップ1で作ったSupabaseの関数 'delete_user' を呼び出す
             try await SupabaseClientManager.shared.client
+                .database
                 .rpc("delete_user")
                 .execute()
             
-            // 成功したらアプリ側もログアウト状態にする
             await sessionStore.signOut()
             
         } catch {
             print("アカウント削除エラー: \(error)")
-            // エラーが発生した場合の処理（必要ならアラートを出すなど）
         }
     }
-    }
+}
 
-    #Preview {
-        NavigationStack {
-            SettingsView()
-                .environmentObject(SessionStore())
-        }
+#Preview {
+    NavigationStack {
+        SettingsView()
+            .environmentObject(SessionStore())
     }
+}

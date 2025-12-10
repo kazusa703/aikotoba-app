@@ -42,11 +42,11 @@ struct InsertReportPayload: Encodable, Sendable {
 // MARK: - Service Class
 
 final class MessageService {
-
+    
     private var supabase: SupabaseClient {
         SupabaseClientManager.shared.client
     }
-
+    
     private var ownerToken: String {
         OwnerTokenManager.shared.getOrCreateToken()
     }
@@ -73,10 +73,12 @@ final class MessageService {
         }
         return decoder
     }()
-
+    
     // MARK: - Fetch
-
+    
     func fetchMessage(by keyword: String) async throws -> Message {
+        // (失敗しても検索は止まらないように try? を使う)
+                try? await supabase.rpc("cleanup_expired_messages").execute()
         do {
             let response = try await supabase
                 .from("messages")
@@ -86,10 +88,10 @@ final class MessageService {
                 .limit(1)
                 .single()
                 .execute()
-
+            
             // ★共通デコーダーを使用
             return try decoder.decode(Message.self, from: response.data)
-
+            
         } catch let error as PostgrestError {
             if error.code == "PGRST116" || error.message.lowercased().contains("not found") {
                 throw MessageServiceError.notFound
@@ -102,7 +104,7 @@ final class MessageService {
     }
     
     // MARK: - Steal (奪う / ロック解除)
-
+    
     func attemptSteal(messageId: UUID, guess: String) async throws -> String {
         let params: [String: String] = [
             "target_message_id": messageId.uuidString,
@@ -125,7 +127,7 @@ final class MessageService {
     }
     
     // MARK: - Increment View Count
-
+    
     func incrementViewCount(for messageId: UUID) async {
         do {
             try await supabase
@@ -139,9 +141,9 @@ final class MessageService {
             print("View count error: \(error)")
         }
     }
-
+    
     // MARK: - Create
-
+    
     func createMessage(
         keyword: String,
         body: String,
@@ -175,7 +177,7 @@ final class MessageService {
             }
             imageUrls = urls
         }
-
+        
         let userId = supabase.auth.currentUser?.id
         
         let payload = InsertMessagePayload(
@@ -190,17 +192,17 @@ final class MessageService {
             is_4_digit: is4Digit,
             is_hidden: false
         )
-
+        
         do {
             let response = try await supabase
                 .from("messages")
                 .insert(payload, returning: .representation)
                 .single()
                 .execute()
-
+            
             // ★共通デコーダーを使用
             return try decoder.decode(Message.self, from: response.data)
-
+            
         } catch let error as PostgrestError {
             if error.message.contains("duplicate key value") ||
                 error.message.contains("messages_keyword_unique") {
@@ -213,7 +215,7 @@ final class MessageService {
     }
     
     // MARK: - Update
-
+    
     func updateMessage(
         message: Message,
         keyword: String,
@@ -342,14 +344,14 @@ final class MessageService {
             print("Failed to delete file: \(error)")
         }
     }
-
+    
     // MARK: - Other Actions
     
     func reportMessage(_ message: Message) async throws {
         let payload = InsertReportPayload(message_id: message.id)
         _ = try await supabase.from("reports").insert(payload).execute()
     }
-
+    
     func deleteMessage(_ message: Message) async throws {
         _ = try await supabase.from("messages").delete().eq("id", value: message.id).execute()
     }
@@ -368,7 +370,7 @@ final class MessageService {
                 .or("user_id.eq.\(userId),creator_id.eq.\(userId)")
                 .order("created_at", ascending: false)
                 .execute()
-
+            
             // ★共通デコーダーを使用
             return try decoder.decode([Message].self, from: response.data)
         } catch {
@@ -376,10 +378,37 @@ final class MessageService {
             throw MessageServiceError.unknown(error)
         }
     }
+    // MARK: - Notifications
 
+        // 通知一覧を取得
+        func fetchNotifications() async throws -> [AppNotification] {
+            guard let userId = supabase.auth.currentUser?.id else { return [] }
+            
+            let response = try await supabase
+                .from("notifications")
+                .select()
+                .eq("user_id", value: userId)
+                .order("created_at", ascending: false)
+                .execute()
+                
+            // 共通デコーダーを使ってデコード
+            return try decoder.decode([AppNotification].self, from: response.data)
+        }
+    
     // MARK: - Owner Check
     
     func isOwner(of message: Message) -> Bool {
-        return message.ownerToken == ownerToken
+        // 1. 端末のトークンが一致するか（従来の判定）
+        if message.ownerToken == ownerToken {
+            return true
+        }
+        
+        // 2. ログイン中のユーザーIDが一致するか（★追加した判定）
+        if let currentUserId = supabase.auth.currentUser?.id,
+           let messageUserId = message.user_id {
+            return currentUserId == messageUserId
+        }
+        
+        return false
     }
 }
