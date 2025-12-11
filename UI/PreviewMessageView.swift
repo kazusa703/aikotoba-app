@@ -7,8 +7,8 @@ struct PreviewMessageView: View {
     let service: MessageService
     
     // RootViewの状態を操作するためのBinding
-    @Binding var rootKeyword: String // 検索ワード（成功時に消すため）
-    @Binding var isPresented: Bool   // この画面を閉じるため
+    @Binding var rootKeyword: String
+    @Binding var isPresented: Bool
     
     // 奪う画面の表示フラグ
     @State private var showingUnlockView = false
@@ -24,7 +24,7 @@ struct PreviewMessageView: View {
 
     var body: some View {
         VStack(spacing: 24) {
-            // ハンドルバー（シートの持ち手）
+            // ハンドルバー
             Capsule()
                 .fill(Color.secondary.opacity(0.3))
                 .frame(width: 40, height: 5)
@@ -61,13 +61,19 @@ struct PreviewMessageView: View {
             .foregroundColor(.secondary)
             .font(.subheadline)
             
+            // ★追加: 登録日を表示
+            Text("登録日: \(formatDate(message.createdAt))")
+                .font(.caption)
+                .foregroundColor(.secondary.opacity(0.7))
+                .padding(.top, -10) // 少し上に詰める
+            
             Divider()
             
             // 内容（スクロール可能）
             ScrollView {
                 VStack(alignment: .leading, spacing: 20) {
                     
-                    // 画像表示（横スクロール）
+                    // 画像表示
                     if let urls = message.image_urls, !urls.isEmpty {
                         ScrollView(.horizontal, showsIndicators: false) {
                             HStack(spacing: 12) {
@@ -128,7 +134,7 @@ struct PreviewMessageView: View {
             
             Divider()
             
-            // 奪うボタン（鍵マーク）
+            // 奪うボタン
             Button {
                 showingUnlockView = true
             } label: {
@@ -173,11 +179,7 @@ struct PreviewMessageView: View {
             Spacer()
         }
         .padding()
-        // 画面が閉じるときに音声を止める
-        .onDisappear {
-            audioPlayer?.pause()
-        }
-        // ★この画面の上から「奪う画面」を出す
+        .onDisappear { audioPlayer?.pause() }
         .fullScreenCover(isPresented: $showingUnlockView) {
             UnlockView(
                 service: service,
@@ -185,13 +187,11 @@ struct PreviewMessageView: View {
                 rootKeyword: $rootKeyword
             )
             .onDisappear {
-                // 成功または諦めて×を押した（検索ワードが消えた）なら、このプレビューシートも閉じる
                 if rootKeyword.isEmpty {
                     isPresented = false
                 }
             }
         }
-        // 通報完了アラート
         .alert("お知らせ", isPresented: $showingReportAlert) {
             Button("OK", role: .cancel) { }
         } message: {
@@ -199,7 +199,15 @@ struct PreviewMessageView: View {
         }
     }
     
-    // MARK: - Logic Methods
+    // MARK: - Helper Methods
+    
+    // 日付フォーマッター
+    private func formatDate(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "ja_JP") // 日本語設定
+        formatter.dateFormat = "yyyy年M月d日" // 表示形式
+        return formatter.string(from: date)
+    }
     
     private func toggleAudio(url: URL) {
         if isPlaying {
