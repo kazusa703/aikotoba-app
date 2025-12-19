@@ -7,21 +7,25 @@ final class SupabaseClientManager {
     let client: SupabaseClient
     
     private init() {
-        // URLの末尾は正しい "ryj" です
+            // ★注意: ここは手入力で修正することをお勧めします
+            // IDが "ryj" なら修正してください
+        // ↓ コピペ禁止！手で打ってください
         let supabaseUrl = URL(string: "https://mdlhncrhfluikvnixryi.supabase.co")!
-        let supabaseKey = "sb_publishable_gMGC4z-W3stM-7Ub4d0XLA_URbDjb1j"
-        
-        self.client = SupabaseClient(
-            supabaseURL: supabaseUrl,
-            supabaseKey: supabaseKey,
-            options: SupabaseClientOptions(
-                auth: SupabaseClientOptions.AuthOptions(
-                    // モバイルアプリ向けの推奨フロー
-                    flowType: .pkce,
-                    // ↓ これを追加すると警告が消えます（新しい挙動を今のうちに有効化する設定）
-                    emitLocalSessionAsInitialSession: true
+            
+            // ★注意: Settings > API から "anon public" キー（eyJから始まるもの）をコピペしてください
+            let supabaseKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1kbG..."
+
+            self.client = SupabaseClient(
+                supabaseURL: supabaseUrl,
+                supabaseKey: supabaseKey,
+                options: SupabaseClientOptions(
+                    auth: SupabaseClientOptions.AuthOptions(
+                        flowType: .pkce,
+                        emitLocalSessionAsInitialSession: true
+                    )
                 )
             )
-        )
+        }
     }
-}
+
+
