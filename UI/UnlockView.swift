@@ -14,6 +14,10 @@ struct UnlockView: View {
     @State private var errorMessage: String?
     @State private var showingLimitAlert = false
     
+    // Hint display
+    @State private var hints: [HintResult] = []
+    @State private var showHints = false
+    
     // Decryption animation
     @State private var isDecrypting = false
     @State private var decodingText = "000"
@@ -31,6 +35,28 @@ struct UnlockView: View {
     )
     
     private let subtleGray = Color(red: 250/255, green: 250/255, blue: 250/255)
+    
+    enum HintResult {
+        case exact      // ◎ 数字と位置が一致
+        case partial    // ○ 数字は合っているが位置が違う
+        case wrong      // × 数字が含まれていない
+        
+        var symbol: String {
+            switch self {
+            case .exact: return "◎"
+            case .partial: return "○"
+            case .wrong: return "×"
+            }
+        }
+        
+        var color: Color {
+            switch self {
+            case .exact: return .green
+            case .partial: return .orange
+            case .wrong: return .red
+            }
+        }
+    }
 
     var body: some View {
         if isSuccess {
@@ -52,6 +78,11 @@ struct UnlockView: View {
                         
                         // MARK: - Title
                         titleSection
+                        
+                        // MARK: - Hints Display
+                        if showHints && !hints.isEmpty {
+                            hintsDisplay
+                        }
                         
                         // MARK: - Input Section
                         inputSection
@@ -99,7 +130,6 @@ struct UnlockView: View {
     // MARK: - Lock Icon
     private var lockIcon: some View {
         ZStack {
-            // Outer ring with gradient
             Circle()
                 .stroke(
                     isDecrypting
@@ -109,12 +139,10 @@ struct UnlockView: View {
                 )
                 .frame(width: 120, height: 120)
             
-            // Inner circle
             Circle()
                 .fill(subtleGray)
                 .frame(width: 100, height: 100)
             
-            // Icon or animation
             if isDecrypting {
                 Text(decodingText)
                     .font(.system(size: 28, weight: .bold, design: .monospaced))
@@ -144,7 +172,6 @@ struct UnlockView: View {
                 .font(.subheadline)
                 .foregroundColor(.secondary)
             
-            // Security level badge
             HStack(spacing: 4) {
                 Image(systemName: targetMessage.is_4_digit ? "lock.shield.fill" : "lock.fill")
                 Text(targetMessage.is_4_digit ? "4桁（高難易度）" : "3桁")
@@ -160,11 +187,63 @@ struct UnlockView: View {
         }
     }
     
+    // MARK: - Hints Display
+    private var hintsDisplay: some View {
+        VStack(spacing: 12) {
+            Text("結果")
+                .font(.caption)
+                .foregroundColor(.secondary)
+            
+            HStack(spacing: 16) {
+                ForEach(hints.indices, id: \.self) { index in
+                    VStack(spacing: 4) {
+                        Text(hints[index].symbol)
+                            .font(.system(size: 32, weight: .bold))
+                            .foregroundColor(hints[index].color)
+                        
+                        // Show the digit that was entered
+                        if index < inputPasscode.count {
+                            let digitIndex = inputPasscode.index(inputPasscode.startIndex, offsetBy: index)
+                            Text(String(inputPasscode[digitIndex]))
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        }
+                    }
+                    .frame(width: 50, height: 60)
+                    .background(hints[index].color.opacity(0.1))
+                    .cornerRadius(12)
+                }
+            }
+            
+            // Legend
+            VStack(alignment: .leading, spacing: 4) {
+                legendRow(symbol: "◎", text: "数字と位置が一致", color: .green)
+                legendRow(symbol: "○", text: "数字は合っているが位置が違う", color: .orange)
+                legendRow(symbol: "×", text: "この数字は含まれていない", color: .red)
+            }
+            .font(.caption)
+            .padding(.top, 8)
+        }
+        .padding(16)
+        .background(subtleGray)
+        .cornerRadius(16)
+        .transition(.opacity.combined(with: .scale(scale: 0.9)))
+    }
+    
+    private func legendRow(symbol: String, text: String, color: Color) -> some View {
+        HStack(spacing: 8) {
+            Text(symbol)
+                .foregroundColor(color)
+                .fontWeight(.bold)
+            Text(text)
+                .foregroundColor(.secondary)
+        }
+    }
+    
     // MARK: - Input Section
     private var inputSection: some View {
         VStack(spacing: 16) {
             if !isDecrypting {
-                // Passcode input
                 HStack {
                     Image(systemName: "key.fill")
                         .foregroundColor(.gray)
@@ -174,19 +253,31 @@ struct UnlockView: View {
                         .font(.title2)
                         .multilineTextAlignment(.center)
                         .disabled(isLoading)
+                        .onChange(of: inputPasscode) { _, newValue in
+                            // Clear hints when user starts typing new input
+                            if showHints {
+                                withAnimation {
+                                    showHints = false
+                                    hints = []
+                                }
+                            }
+                            // Limit input length
+                            let limit = targetMessage.is_4_digit ? 4 : 3
+                            if newValue.count > limit {
+                                inputPasscode = String(newValue.prefix(limit))
+                            }
+                        }
                 }
                 .padding(16)
                 .background(subtleGray)
                 .cornerRadius(16)
                 
-                // Hint
                 Text("1日1回のみ挑戦できます")
                     .font(.caption)
                     .foregroundColor(.secondary)
             }
             
-            // Error message
-            if let errorMessage {
+            if let errorMessage, !showHints {
                 HStack(spacing: 6) {
                     Image(systemName: "xmark.circle.fill")
                         .foregroundColor(.red)
@@ -232,6 +323,9 @@ struct UnlockView: View {
         isLoading = true
         errorMessage = nil
         
+        // Store the input for hint display
+        let attemptedPasscode = inputPasscode
+        
         // Start decryption animation
         withAnimation { isDecrypting = true }
         
@@ -246,12 +340,11 @@ struct UnlockView: View {
         do {
             let result = try await service.attemptSteal(
                 messageId: targetMessage.id,
-                guess: inputPasscode
+                guess: attemptedPasscode
             )
             
             if result == "success" {
-                // Show correct answer briefly
-                decodingText = inputPasscode
+                decodingText = attemptedPasscode
                 try? await Task.sleep(nanoseconds: 500_000_000)
                 
                 withAnimation {
@@ -259,12 +352,47 @@ struct UnlockView: View {
                 }
             } else if result == "limit_exceeded" {
                 showingLimitAlert = true
+            } else if result.hasPrefix("failed:") {
+                // Parse hints from server response (format: "failed:◎×○")
+                let hintString = String(result.dropFirst(7))
+                parseHints(from: hintString, attemptedPasscode: attemptedPasscode)
+                
+                withAnimation(.spring(response: 0.4, dampingFraction: 0.7)) {
+                    showHints = true
+                }
             } else {
+                // Fallback: generate hints client-side if server doesn't provide them
+                // Note: This is just for UI demonstration - real hints need server support
                 errorMessage = "番号が違います"
                 inputPasscode = ""
             }
         } catch {
             errorMessage = "エラーが発生しました"
         }
+    }
+    
+    private func parseHints(from hintString: String, attemptedPasscode: String) {
+        hints = []
+        
+        for char in hintString {
+            switch char {
+            case "◎":
+                hints.append(.exact)
+            case "○":
+                hints.append(.partial)
+            case "×":
+                hints.append(.wrong)
+            default:
+                break
+            }
+        }
+        
+        // If no hints parsed, show all wrong
+        if hints.isEmpty {
+            let digitCount = targetMessage.is_4_digit ? 4 : 3
+            hints = Array(repeating: .wrong, count: digitCount)
+        }
+        
+        inputPasscode = attemptedPasscode
     }
 }

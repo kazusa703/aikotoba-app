@@ -4,6 +4,7 @@ import Supabase
 // MARK: - Error Types
 enum MessageServiceError: Error {
     case notFound
+    case hidden  // ★追加: 非公開
     case keywordAlreadyExists
     case notSignedIn
     case unknown(Error)
@@ -53,19 +54,16 @@ final class MessageService {
     
     private let projectUrlString = "https://mdlhncrhfluikvnixryi.supabase.co"
     
-    // ★追加: 共通のカスタムデコーダー (ミリ秒と通常のISO8601両対応)
     private let decoder: JSONDecoder = {
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .custom { decoder in
             let container = try decoder.singleValueContainer()
             let dateStr = try container.decode(String.self)
             
-            // 1. ミリ秒付き (例: 2023-10-10T10:00:00.123+00:00) を試す
             let formatter = ISO8601DateFormatter()
             formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
             if let date = formatter.date(from: dateStr) { return date }
             
-            // 2. 通常 (例: 2023-10-10T10:00:00Z) を試す
             formatter.formatOptions = [.withInternetDateTime]
             if let date = formatter.date(from: dateStr) { return date }
             
@@ -74,11 +72,33 @@ final class MessageService {
         return decoder
     }()
     
-    // MARK: - Fetch
+    // MARK: - Fetch with Status Check
     
-    func fetchMessage(by keyword: String) async throws -> Message {
-        // (失敗しても検索は止まらないように try? を使う)
-                try? await supabase.rpc("cleanup_expired_messages").execute()
+    /// ★新規: 非公開かどうかもチェックして検索
+    func fetchMessageWithStatus(by keyword: String) async throws -> Message {
+        // まず cleanup を実行（24時間経過した非公開投稿を自動公開）
+        try? await supabase.rpc("cleanup_expired_messages").execute()
+        
+        // ステータスをチェック
+        let statusResponse: String = try await supabase
+            .database
+            .rpc("check_message_status", params: ["keyword_input": keyword])
+            .execute()
+            .value
+        
+        switch statusResponse {
+        case "not_found":
+            throw MessageServiceError.notFound
+        case "hidden":
+            throw MessageServiceError.hidden
+        default:
+            // 公開中なら通常通り取得
+            return try await fetchMessageDirect(by: keyword)
+        }
+    }
+    
+    /// 直接取得（ステータスチェック済みの場合用）
+    private func fetchMessageDirect(by keyword: String) async throws -> Message {
         do {
             let response = try await supabase
                 .from("messages")
@@ -89,7 +109,33 @@ final class MessageService {
                 .single()
                 .execute()
             
-            // ★共通デコーダーを使用
+            return try decoder.decode(Message.self, from: response.data)
+            
+        } catch let error as PostgrestError {
+            if error.code == "PGRST116" || error.message.lowercased().contains("not found") {
+                throw MessageServiceError.notFound
+            }
+            print("Supabase Error: \(error)")
+            throw MessageServiceError.unknown(error)
+        } catch {
+            throw MessageServiceError.unknown(error)
+        }
+    }
+    
+    /// 従来のfetchMessage（互換性のため残す）
+    func fetchMessage(by keyword: String) async throws -> Message {
+        try? await supabase.rpc("cleanup_expired_messages").execute()
+        
+        do {
+            let response = try await supabase
+                .from("messages")
+                .select()
+                .eq("keyword", value: keyword)
+                .eq("is_hidden", value: false)
+                .limit(1)
+                .single()
+                .execute()
+            
             return try decoder.decode(Message.self, from: response.data)
             
         } catch let error as PostgrestError {
@@ -200,7 +246,6 @@ final class MessageService {
                 .single()
                 .execute()
             
-            // ★共通デコーダーを使用
             return try decoder.decode(Message.self, from: response.data)
             
         } catch let error as PostgrestError {
@@ -284,7 +329,6 @@ final class MessageService {
                 .single()
                 .execute()
             
-            // ★共通デコーダーを使用
             return try decoder.decode(Message.self, from: response.data)
             
         } catch let error as PostgrestError {
@@ -295,6 +339,26 @@ final class MessageService {
             throw MessageServiceError.unknown(error)
         } catch {
             print("Update failed: \(error)")
+            throw MessageServiceError.unknown(error)
+        }
+    }
+    
+    // MARK: - Upgrade to 4 Digit
+    
+    /// ★新規: 4桁モードにアップグレード
+    func upgradeTo4Digit(message: Message) async throws -> Message {
+        do {
+            let response = try await supabase
+                .from("messages")
+                .update(["is_4_digit": true])
+                .eq("id", value: message.id)
+                .select()
+                .single()
+                .execute()
+            
+            return try decoder.decode(Message.self, from: response.data)
+        } catch {
+            print("Upgrade failed: \(error)")
             throw MessageServiceError.unknown(error)
         }
     }
@@ -371,39 +435,35 @@ final class MessageService {
                 .order("created_at", ascending: false)
                 .execute()
             
-            // ★共通デコーダーを使用
             return try decoder.decode([Message].self, from: response.data)
         } catch {
             print("Supabase fetchMyMessages error: \(error)")
             throw MessageServiceError.unknown(error)
         }
     }
+    
     // MARK: - Notifications
 
-        // 通知一覧を取得
-        func fetchNotifications() async throws -> [AppNotification] {
-            guard let userId = supabase.auth.currentUser?.id else { return [] }
+    func fetchNotifications() async throws -> [AppNotification] {
+        guard let userId = supabase.auth.currentUser?.id else { return [] }
+        
+        let response = try await supabase
+            .from("notifications")
+            .select()
+            .eq("user_id", value: userId)
+            .order("created_at", ascending: false)
+            .execute()
             
-            let response = try await supabase
-                .from("notifications")
-                .select()
-                .eq("user_id", value: userId)
-                .order("created_at", ascending: false)
-                .execute()
-                
-            // 共通デコーダーを使ってデコード
-            return try decoder.decode([AppNotification].self, from: response.data)
-        }
+        return try decoder.decode([AppNotification].self, from: response.data)
+    }
     
     // MARK: - Owner Check
     
     func isOwner(of message: Message) -> Bool {
-        // 1. 端末のトークンが一致するか（従来の判定）
         if message.ownerToken == ownerToken {
             return true
         }
         
-        // 2. ログイン中のユーザーIDが一致するか（★追加した判定）
         if let currentUserId = supabase.auth.currentUser?.id,
            let messageUserId = message.user_id {
             return currentUserId == messageUserId

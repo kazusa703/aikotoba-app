@@ -8,6 +8,7 @@ struct RootView: View {
     @State private var keyword: String = ""
     @State private var isLoading = false
     @State private var errorMessage: String?
+    @State private var isHiddenMessage = false  // ★追加: 非公開フラグ
     
     // MARK: - Navigation State
     @State private var foundMessage: Message?
@@ -26,9 +27,9 @@ struct RootView: View {
     // MARK: - Instagram Colors
     private let instagramGradient = LinearGradient(
         colors: [
-            Color(red: 131/255, green: 58/255, blue: 180/255),   // Purple
-            Color(red: 253/255, green: 29/255, blue: 29/255),    // Red
-            Color(red: 252/255, green: 176/255, blue: 69/255)    // Orange
+            Color(red: 131/255, green: 58/255, blue: 180/255),
+            Color(red: 253/255, green: 29/255, blue: 29/255),
+            Color(red: 252/255, green: 176/255, blue: 69/255)
         ],
         startPoint: .topLeading,
         endPoint: .bottomTrailing
@@ -39,7 +40,6 @@ struct RootView: View {
     var body: some View {
         NavigationStack {
             ZStack {
-                // 背景
                 Color.white.ignoresSafeArea()
                 
                 VStack(spacing: 0) {
@@ -56,11 +56,9 @@ struct RootView: View {
                     // MARK: - Main Content
                     ScrollView {
                         VStack(spacing: 24) {
-                            // Hero Section
                             heroSection
                                 .padding(.top, 20)
                             
-                            // How it works
                             howItWorksSection
                             
                             Spacer(minLength: 100)
@@ -102,16 +100,13 @@ struct RootView: View {
     // MARK: - Header View
     private var headerView: some View {
         HStack {
-            // Logo
             Text("aikotoba")
                 .font(.system(size: 28, weight: .bold, design: .serif))
                 .italic()
             
             Spacer()
             
-            // Action Buttons
             HStack(spacing: 20) {
-                // New Post
                 NavigationLink {
                     NewMessageView(service: service) { created in
                         justCreatedMessage = created
@@ -126,7 +121,6 @@ struct RootView: View {
                         .foregroundColor(.black)
                 }
                 
-                // Notifications
                 Button {
                     showingNotifications = true
                 } label: {
@@ -135,7 +129,6 @@ struct RootView: View {
                         .foregroundColor(.black)
                 }
                 
-                // My Messages
                 NavigationLink {
                     MyMessagesView()
                 } label: {
@@ -144,7 +137,6 @@ struct RootView: View {
                         .foregroundColor(.black)
                 }
                 
-                // Settings
                 NavigationLink {
                     SettingsView()
                 } label: {
@@ -170,10 +162,17 @@ struct RootView: View {
                 TextField("合言葉を入力", text: $keyword)
                     .textInputAutocapitalization(.never)
                     .disableAutocorrection(true)
+                    .onChange(of: keyword) { _, _ in
+                        // 入力が変わったらエラーをクリア
+                        errorMessage = nil
+                        isHiddenMessage = false
+                    }
                 
                 if !keyword.isEmpty {
                     Button {
                         keyword = ""
+                        errorMessage = nil
+                        isHiddenMessage = false
                     } label: {
                         Image(systemName: "xmark.circle.fill")
                             .foregroundColor(.gray)
@@ -201,20 +200,25 @@ struct RootView: View {
                 .padding(.vertical, 14)
                 .background(
                     keyword.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-                    ? AnyShapeStyle(Color.gray.opacity(0.3))
-                    : AnyShapeStyle(instagramGradient)
-                )
-                .foregroundColor(.white)
-                .cornerRadius(12)
-            }
+                        ? AnyShapeStyle(Color.gray.opacity(0.3))
+                        : AnyShapeStyle(instagramGradient)
+                    )
+                    .foregroundColor(.white)
+                    .cornerRadius(12)
+                    }
             .disabled(keyword.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isLoading)
             
             // Error Message
             if let errorMessage {
-                Text(errorMessage)
-                    .font(.caption)
-                    .foregroundColor(.red)
-                    .padding(.top, 4)
+                HStack(spacing: 6) {
+                    Image(systemName: isHiddenMessage ? "eye.slash.fill" : "exclamationmark.circle.fill")
+                        .foregroundColor(isHiddenMessage ? .orange : .red)
+                    
+                    Text(errorMessage)
+                        .foregroundColor(isHiddenMessage ? .orange : .red)
+                }
+                .font(.caption)
+                .padding(.top, 4)
             }
         }
     }
@@ -222,7 +226,6 @@ struct RootView: View {
     // MARK: - Hero Section
     private var heroSection: some View {
         VStack(spacing: 16) {
-            // Icon with gradient border
             ZStack {
                 Circle()
                     .stroke(instagramGradient, lineWidth: 3)
@@ -303,9 +306,10 @@ struct RootView: View {
         .cornerRadius(16)
     }
 
-    // MARK: - Functions
+    // MARK: - Search Function
     private func search() async {
         errorMessage = nil
+        isHiddenMessage = false
         isLoading = true
         foundMessage = nil
         
@@ -315,7 +319,8 @@ struct RootView: View {
         guard !trimmed.isEmpty else { return }
 
         do {
-            var message = try await service.fetchMessage(by: trimmed)
+            // ★新しいメソッドを使用（非公開チェック込み）
+            let message = try await service.fetchMessageWithStatus(by: trimmed)
             
             await MainActor.run {
                 if service.isOwner(of: message) {
@@ -325,10 +330,17 @@ struct RootView: View {
                     Task {
                         await service.incrementViewCount(for: message.id)
                     }
-                    message.view_count += 1
-                    foundMessage = message
+                    var updatedMessage = message
+                    updatedMessage.view_count += 1
+                    foundMessage = updatedMessage
                     showingPreviewSheet = true
                 }
+            }
+        } catch MessageServiceError.hidden {
+            // ★非公開の場合
+            await MainActor.run {
+                isHiddenMessage = true
+                errorMessage = "この合言葉は現在非公開です"
             }
         } catch MessageServiceError.notFound {
             await MainActor.run {

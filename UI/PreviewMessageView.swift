@@ -17,6 +17,12 @@ struct PreviewMessageView: View {
     @State private var showingReportAlert = false
     @State private var currentImageIndex = 0
     
+    // Tooltip states
+    @State private var showViewTooltip = false
+    @State private var showChallengeTooltip = false
+    @State private var showDefenseTooltip = false
+    @State private var showStolenTooltip = false
+    
     // Instagram Colors
     private let instagramGradient = LinearGradient(
         colors: [
@@ -30,40 +36,58 @@ struct PreviewMessageView: View {
 
     var body: some View {
         NavigationStack {
-            ScrollView {
-                VStack(spacing: 0) {
-                    // MARK: - Header (User Info Style)
-                    headerSection
-                    
-                    // MARK: - Image Carousel
-                    if let urls = message.image_urls, !urls.isEmpty {
-                        imageCarousel(urls: urls)
+            ZStack {
+                // Main content
+                ScrollView {
+                    VStack(spacing: 0) {
+                        // MARK: - Header (User Info Style)
+                        headerSection
+                        
+                        // MARK: - Image Carousel
+                        if let urls = message.image_urls, !urls.isEmpty {
+                            imageCarousel(urls: urls)
+                        }
+                        
+                        // MARK: - Stats Bar with Tooltips
+                        statsBar
+                        
+                        // MARK: - Body Text
+                        if !message.body.isEmpty {
+                            bodySection
+                        }
+                        
+                        // MARK: - Voice Message
+                        if let voiceUrl = message.voice_url, let url = URL(string: voiceUrl) {
+                            voiceSection(url: url)
+                        }
+                        
+                        // MARK: - Report
+                        reportButton
+                        
+                        // Spacer to push steal button to bottom
+                        Spacer(minLength: 100)
                     }
-                    
-                    // MARK: - Action Bar
-                    actionBar
-                    
-                    // MARK: - Stats
-                    statsSection
-                    
-                    // MARK: - Body Text
-                    if !message.body.isEmpty {
-                        bodySection
-                    }
-                    
-                    // MARK: - Voice Message
-                    if let voiceUrl = message.voice_url, let url = URL(string: voiceUrl) {
-                        voiceSection(url: url)
-                    }
-                    
-                    // MARK: - Steal Button
-                    stealButton
-                    
-                    // MARK: - Report
-                    reportButton
-                    
-                    Spacer(minLength: 40)
                 }
+                
+                // MARK: - Steal Button (Fixed at bottom)
+                VStack {
+                    Spacer()
+                    stealButton
+                        .padding(.horizontal, 16)
+                        .padding(.bottom, 16)
+                        .background(
+                            LinearGradient(
+                                colors: [.white.opacity(0), .white, .white],
+                                startPoint: .top,
+                                endPoint: .bottom
+                            )
+                            .frame(height: 100)
+                            .allowsHitTesting(false)
+                        , alignment: .bottom)
+                }
+                
+                // MARK: - Tooltip Overlays
+                tooltipOverlay
             }
             .background(Color.white)
             .navigationBarTitleDisplayMode(.inline)
@@ -168,49 +192,114 @@ struct PreviewMessageView: View {
         .frame(height: 400)
     }
     
-    // MARK: - Action Bar
-    private var actionBar: some View {
-        HStack(spacing: 16) {
-            // Stats icons
-            HStack(spacing: 4) {
-                Image(systemName: "eye")
-                Text("\(message.view_count)")
-            }
-            .foregroundColor(.secondary)
+    // MARK: - Stats Bar with Long Press Tooltips
+    private var statsBar: some View {
+        HStack(spacing: 20) {
+            // Views (eye icon)
+            statIcon(
+                systemName: "eye.fill",
+                value: message.view_count,
+                color: .secondary,
+                isShowingTooltip: $showViewTooltip,
+                tooltipText: "閲覧数"
+            )
             
-            HStack(spacing: 4) {
-                Image(systemName: "flag.fill")
-                Text("\(message.stolen_count)")
-            }
-            .foregroundColor(.green)
+            // Challenge attempts (spear/arrow icon)
+            statIcon(
+                systemName: "arrowtriangle.up.fill",
+                value: message.failed_count,
+                color: .orange,
+                isShowingTooltip: $showChallengeTooltip,
+                tooltipText: "挑戦した人の数"
+            )
             
-            HStack(spacing: 4) {
-                Image(systemName: "shield.fill")
-                Text("\(message.failed_count)")
-            }
-            .foregroundColor(.red)
+            // Defense (shield icon)
+            statIcon(
+                systemName: "shield.fill",
+                value: message.failed_count,
+                color: .green,
+                isShowingTooltip: $showDefenseTooltip,
+                tooltipText: "防衛成功回数"
+            )
+            
+            // Stolen count (lock open icon)
+            statIcon(
+                systemName: "lock.open.fill",
+                value: message.stolen_count,
+                color: .purple,
+                isShowingTooltip: $showStolenTooltip,
+                tooltipText: "奪取された回数"
+            )
             
             Spacer()
-            
-            // Bookmark (decorative)
-            Image(systemName: "bookmark")
-                .foregroundColor(.primary)
         }
         .font(.subheadline)
         .padding(.horizontal, 16)
         .padding(.vertical, 12)
     }
     
-    // MARK: - Stats Section
-    private var statsSection: some View {
-        HStack {
-            Text("\(message.view_count)回閲覧")
-                .font(.subheadline)
-                .fontWeight(.semibold)
+    private func statIcon(
+        systemName: String,
+        value: Int,
+        color: Color,
+        isShowingTooltip: Binding<Bool>,
+        tooltipText: String
+    ) -> some View {
+        HStack(spacing: 4) {
+            Image(systemName: systemName)
+            Text("\(value)")
+        }
+        .foregroundColor(color)
+        .onLongPressGesture(minimumDuration: 0.3) {
+            // Hide all other tooltips
+            hideAllTooltips()
+            isShowingTooltip.wrappedValue = true
+            
+            // Auto-hide after 2 seconds
+            DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+                isShowingTooltip.wrappedValue = false
+            }
+        }
+    }
+    
+    private func hideAllTooltips() {
+        showViewTooltip = false
+        showChallengeTooltip = false
+        showDefenseTooltip = false
+        showStolenTooltip = false
+    }
+    
+    // MARK: - Tooltip Overlay
+    private var tooltipOverlay: some View {
+        VStack {
+            if showViewTooltip {
+                tooltipBubble(text: "閲覧数")
+            } else if showChallengeTooltip {
+                tooltipBubble(text: "挑戦した人の数")
+            } else if showDefenseTooltip {
+                tooltipBubble(text: "防衛成功回数")
+            } else if showStolenTooltip {
+                tooltipBubble(text: "奪取された回数")
+            }
             Spacer()
         }
-        .padding(.horizontal, 16)
-        .padding(.bottom, 8)
+        .padding(.top, 180) // Position below stats bar
+        .animation(.easeInOut(duration: 0.2), value: showViewTooltip)
+        .animation(.easeInOut(duration: 0.2), value: showChallengeTooltip)
+        .animation(.easeInOut(duration: 0.2), value: showDefenseTooltip)
+        .animation(.easeInOut(duration: 0.2), value: showStolenTooltip)
+    }
+    
+    private func tooltipBubble(text: String) -> some View {
+        Text(text)
+            .font(.caption)
+            .fontWeight(.medium)
+            .foregroundColor(.white)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+            .background(Color.black.opacity(0.8))
+            .cornerRadius(8)
+            .transition(.opacity.combined(with: .scale))
     }
     
     // MARK: - Body Section
@@ -254,9 +343,9 @@ struct PreviewMessageView: View {
                 
                 Spacer()
                 
-                // Waveform animation placeholder
+                // Waveform placeholder
                 HStack(spacing: 2) {
-                    ForEach(0..<5, id: \.self) { i in
+                    ForEach(0..<5, id: \.self) { _ in
                         RoundedRectangle(cornerRadius: 2)
                             .fill(Color.gray.opacity(0.3))
                             .frame(width: 3, height: CGFloat.random(in: 10...25))
@@ -287,10 +376,9 @@ struct PreviewMessageView: View {
             .padding(.vertical, 16)
             .background(instagramGradient)
             .foregroundColor(.white)
-            .cornerRadius(12)
+            .cornerRadius(16)
+            .shadow(color: .purple.opacity(0.3), radius: 10, x: 0, y: 5)
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 8)
     }
     
     // MARK: - Report Button
