@@ -15,239 +15,65 @@ struct PreviewMessageView: View {
     @State private var isReporting = false
     @State private var reportAlertMessage: String?
     @State private var showingReportAlert = false
+    @State private var currentImageIndex = 0
+    
+    // Instagram Colors
+    private let instagramGradient = LinearGradient(
+        colors: [
+            Color(red: 131/255, green: 58/255, blue: 180/255),
+            Color(red: 253/255, green: 29/255, blue: 29/255),
+            Color(red: 252/255, green: 176/255, blue: 69/255)
+        ],
+        startPoint: .topLeading,
+        endPoint: .bottomTrailing
+    )
 
     var body: some View {
-        ZStack {
-            // MARK: - 1. 背景デザイン (RootViewと統一)
-            Color(uiColor: .systemGroupedBackground)
-                .ignoresSafeArea()
-            
-            // 背景の装飾（ふんわりした円）
-            GeometryReader { proxy in
-                Circle()
-                    .fill(
-                        LinearGradient(colors: [.blue.opacity(0.2), .purple.opacity(0.2)], startPoint: .topLeading, endPoint: .bottomTrailing)
-                    )
-                    .frame(width: 300, height: 300)
-                    .blur(radius: 60)
-                    .offset(x: -50, y: -100)
-                
-                Circle()
-                    .fill(
-                        LinearGradient(colors: [.yellow.opacity(0.2), .orange.opacity(0.2)], startPoint: .bottomLeading, endPoint: .topTrailing)
-                    )
-                    .frame(width: 200, height: 200)
-                    .blur(radius: 40)
-                    .position(x: proxy.size.width, y: proxy.size.height * 0.8)
+        NavigationStack {
+            ScrollView {
+                VStack(spacing: 0) {
+                    // MARK: - Header (User Info Style)
+                    headerSection
+                    
+                    // MARK: - Image Carousel
+                    if let urls = message.image_urls, !urls.isEmpty {
+                        imageCarousel(urls: urls)
+                    }
+                    
+                    // MARK: - Action Bar
+                    actionBar
+                    
+                    // MARK: - Stats
+                    statsSection
+                    
+                    // MARK: - Body Text
+                    if !message.body.isEmpty {
+                        bodySection
+                    }
+                    
+                    // MARK: - Voice Message
+                    if let voiceUrl = message.voice_url, let url = URL(string: voiceUrl) {
+                        voiceSection(url: url)
+                    }
+                    
+                    // MARK: - Steal Button
+                    stealButton
+                    
+                    // MARK: - Report
+                    reportButton
+                    
+                    Spacer(minLength: 40)
+                }
             }
-            
-            VStack(spacing: 0) {
-                // MARK: - ヘッダーエリア
-                HStack {
-                    Spacer()
-                    // 閉じるボタン
+            .background(Color.white)
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) {
                     Button {
                         isPresented = false
                     } label: {
                         Image(systemName: "xmark")
-                            .font(.system(size: 16, weight: .bold))
-                            .foregroundColor(.secondary)
-                            .padding(10)
-                            .background(Color.white)
-                            .clipShape(Circle())
-                            .shadow(color: .black.opacity(0.1), radius: 3, x: 0, y: 2)
-                    }
-                }
-                .padding()
-                
-                ScrollView(showsIndicators: false) {
-                    VStack(spacing: 24) {
-                        
-                        // MARK: - メインカード
-                        VStack(spacing: 20) {
-                            
-                            // 合言葉タイトル
-                            VStack(spacing: 8) {
-                                Text(message.keyword)
-                                    .font(.system(size: 32, weight: .heavy, design: .rounded))
-                                    .multilineTextAlignment(.center)
-                                    .foregroundColor(.primary)
-                                    .shadow(color: .black.opacity(0.1), radius: 2, x: 0, y: 1)
-                                
-                                // 登録日
-                                Text(formatDate(message.createdAt))
-                                    .font(.caption)
-                                    .foregroundColor(.secondary)
-                                    .padding(.horizontal, 12)
-                                    .padding(.vertical, 4)
-                                    .background(Color(uiColor: .secondarySystemBackground))
-                                    .cornerRadius(8)
-                            }
-                            .padding(.top, 10)
-
-                            // 統計データ（アイコン付きバッジ）
-                            HStack(spacing: 16) {
-                                statBadge(icon: "eye.fill", count: message.view_count, color: .blue)
-                                statBadge(icon: "flag.fill", count: message.stolen_count, color: .green)
-                                statBadge(icon: "burst.fill", count: message.failed_count, color: .red)
-                            }
-
-                            Divider()
-                                .padding(.horizontal)
-
-                            // MARK: - コンテンツエリア
-                            VStack(alignment: .leading, spacing: 20) {
-                                // 画像
-                                if let urls = message.image_urls, !urls.isEmpty {
-                                    ScrollView(.horizontal, showsIndicators: false) {
-                                        HStack(spacing: 12) {
-                                            ForEach(urls, id: \.self) { urlString in
-                                                if let url = URL(string: urlString) {
-                                                    AsyncImage(url: url) { image in
-                                                        image.resizable().scaledToFill()
-                                                    } placeholder: {
-                                                        ZStack {
-                                                            Color.gray.opacity(0.1)
-                                                            ProgressView()
-                                                        }
-                                                    }
-                                                    .frame(width: 200, height: 140)
-                                                    .clipped()
-                                                    .cornerRadius(16)
-                                                    .shadow(color: .black.opacity(0.1), radius: 4, x: 0, y: 2)
-                                                }
-                                            }
-                                        }
-                                        .padding(.horizontal, 4) // 影が見えるように余白
-                                        .padding(.bottom, 8)
-                                    }
-                                }
-
-                                // テキスト本文
-                                if !message.body.isEmpty {
-                                    Text(message.body)
-                                        .font(.body)
-                                        .foregroundColor(.primary)
-                                        .lineSpacing(4)
-                                        .padding(16)
-                                        .frame(maxWidth: .infinity, alignment: .leading)
-                                        .background(Color(uiColor: .secondarySystemBackground).opacity(0.5))
-                                        .cornerRadius(16)
-                                }
-
-                                // ボイス再生
-                                if let voiceUrl = message.voice_url, let url = URL(string: voiceUrl) {
-                                    Button {
-                                        toggleAudio(url: url)
-                                    } label: {
-                                        HStack(spacing: 12) {
-                                            ZStack {
-                                                Circle()
-                                                    .fill(Color.blue)
-                                                    .frame(width: 44, height: 44)
-                                                
-                                                Image(systemName: isPlaying ? "pause.fill" : "play.fill")
-                                                    .foregroundColor(.white)
-                                                    .font(.title3)
-                                            }
-                                            
-                                            VStack(alignment: .leading, spacing: 2) {
-                                                Text("ボイスメッセージ")
-                                                    .font(.subheadline)
-                                                    .fontWeight(.bold)
-                                                    .foregroundColor(.primary)
-                                                Text(isPlaying ? "再生中..." : "タップして再生")
-                                                    .font(.caption)
-                                                    .foregroundColor(.secondary)
-                                            }
-                                            Spacer()
-                                            
-                                            Image(systemName: "waveform")
-                                                .foregroundColor(.blue.opacity(0.5))
-                                                .font(.title2)
-                                        }
-                                        .padding(10)
-                                        .background(Color.white)
-                                        .cornerRadius(30)
-                                        .shadow(color: .black.opacity(0.08), radius: 5, x: 0, y: 2)
-                                        .overlay(
-                                            RoundedRectangle(cornerRadius: 30)
-                                                .stroke(Color.blue.opacity(0.1), lineWidth: 1)
-                                        )
-                                    }
-                                }
-                            }
-                            .padding(.horizontal)
-                            .padding(.bottom, 10)
-
-                        }
-                        .background(Color.white)
-                        .cornerRadius(24)
-                        .shadow(color: .black.opacity(0.08), radius: 15, x: 0, y: 5)
-                        .padding(.horizontal)
-
-                        // MARK: - アクションボタン (奪う)
-                        // PreviewMessageView.swift の 奪うボタン（Button）部分を修正
-
-                                    // 奪うボタン
-                                    Button {
-                                        showingUnlockView = true
-                                    } label: {
-                                        VStack(spacing: 4) {
-                                            Image(systemName: "lock.fill")
-                                                .font(.system(size: 30))
-                                                .foregroundColor(message.is_4_digit ? .white : .orange) // 4桁なら白文字
-                                            
-                                            Text("この投稿を奪う")
-                                                .font(.headline)
-                                                .fontWeight(.bold)
-                                                .foregroundColor(message.is_4_digit ? .white : .black)
-                                            
-                                            Text(message.is_4_digit ? "🔒 4桁（高難易度）" : "3桁の暗証番号")
-                                                .font(.caption)
-                                                .foregroundColor(message.is_4_digit ? .white.opacity(0.8) : .gray)
-                                        }
-                                        .frame(maxWidth: .infinity)
-                                        .padding()
-                                        // ★変更: 4桁の場合は豪華な背景（ゴールドグラデーション）にする
-                                        .background(
-                                            Group {
-                                                if message.is_4_digit {
-                                                    LinearGradient(
-                                                        gradient: Gradient(colors: [Color.orange, Color.yellow]),
-                                                        startPoint: .topLeading,
-                                                        endPoint: .bottomTrailing
-                                                    )
-                                                } else {
-                                                    Color.clear // 3桁は背景なし（枠線のみ）
-                                                }
-                                            }
-                                        )
-                                        // 3桁の場合の枠線
-                                        .overlay(
-                                            RoundedRectangle(cornerRadius: 16)
-                                                .stroke(message.is_4_digit ? Color.clear : Color.orange, lineWidth: 3)
-                                        )
-                                        .cornerRadius(16)
-                                        // 4桁の場合は影をつけて浮かび上がらせる
-                                        .shadow(color: message.is_4_digit ? .orange.opacity(0.5) : .clear, radius: 10, x: 0, y: 5)
-                                    }
-                        // 通報リンク
-                        Button {
-                            Task { await report() }
-                        } label: {
-                            if isReporting {
-                                ProgressView().font(.caption)
-                            } else {
-                                Text("不適切な投稿として通報する")
-                                    .font(.caption)
-                                    .foregroundColor(.gray)
-                                    .underline()
-                            }
-                        }
-                        .padding(.bottom, 20)
-                        
-                        Spacer(minLength: 50)
+                            .foregroundColor(.primary)
                     }
                 }
             }
@@ -270,29 +96,225 @@ struct PreviewMessageView: View {
         }
     }
     
-    // MARK: - Helpers
-    
-    // 統計バッジのデザイン用ヘルパー
-    private func statBadge(icon: String, count: Int, color: Color) -> some View {
-        HStack(spacing: 4) {
-            Image(systemName: icon)
-                .font(.caption2)
-            Text("\(count)")
-                .font(.subheadline)
-                .fontWeight(.bold)
+    // MARK: - Header Section
+    private var headerSection: some View {
+        HStack(spacing: 12) {
+            // Avatar with gradient border
+            ZStack {
+                Circle()
+                    .stroke(instagramGradient, lineWidth: 2)
+                    .frame(width: 44, height: 44)
+                
+                Circle()
+                    .fill(Color.gray.opacity(0.2))
+                    .frame(width: 38, height: 38)
+                
+                Image(systemName: "person.fill")
+                    .foregroundColor(.gray)
+            }
+            
+            VStack(alignment: .leading, spacing: 2) {
+                Text(message.keyword)
+                    .font(.subheadline)
+                    .fontWeight(.semibold)
+                
+                Text(formatDate(message.createdAt))
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
+            
+            Spacer()
+            
+            // Lock indicator
+            HStack(spacing: 4) {
+                Image(systemName: "lock.fill")
+                    .font(.caption)
+                Text(message.is_4_digit ? "4桁" : "3桁")
+                    .font(.caption)
+                    .fontWeight(.medium)
+            }
+            .foregroundColor(message.is_4_digit ? .green : .orange)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+            .background(
+                Capsule()
+                    .fill(message.is_4_digit ? Color.green.opacity(0.1) : Color.orange.opacity(0.1))
+            )
         }
-        .foregroundColor(color)
-        .padding(.horizontal, 12)
-        .padding(.vertical, 6)
-        .background(color.opacity(0.1))
-        .cornerRadius(12)
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
     }
-
+    
+    // MARK: - Image Carousel
+    private func imageCarousel(urls: [String]) -> some View {
+        TabView(selection: $currentImageIndex) {
+            ForEach(urls.indices, id: \.self) { index in
+                AsyncImage(url: URL(string: urls[index])) { image in
+                    image
+                        .resizable()
+                        .scaledToFill()
+                } placeholder: {
+                    Rectangle()
+                        .fill(Color.gray.opacity(0.1))
+                        .overlay(ProgressView())
+                }
+                .frame(maxWidth: .infinity)
+                .frame(height: 400)
+                .clipped()
+                .tag(index)
+            }
+        }
+        .tabViewStyle(.page(indexDisplayMode: urls.count > 1 ? .automatic : .never))
+        .frame(height: 400)
+    }
+    
+    // MARK: - Action Bar
+    private var actionBar: some View {
+        HStack(spacing: 16) {
+            // Stats icons
+            HStack(spacing: 4) {
+                Image(systemName: "eye")
+                Text("\(message.view_count)")
+            }
+            .foregroundColor(.secondary)
+            
+            HStack(spacing: 4) {
+                Image(systemName: "flag.fill")
+                Text("\(message.stolen_count)")
+            }
+            .foregroundColor(.green)
+            
+            HStack(spacing: 4) {
+                Image(systemName: "shield.fill")
+                Text("\(message.failed_count)")
+            }
+            .foregroundColor(.red)
+            
+            Spacer()
+            
+            // Bookmark (decorative)
+            Image(systemName: "bookmark")
+                .foregroundColor(.primary)
+        }
+        .font(.subheadline)
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
+    }
+    
+    // MARK: - Stats Section
+    private var statsSection: some View {
+        HStack {
+            Text("\(message.view_count)回閲覧")
+                .font(.subheadline)
+                .fontWeight(.semibold)
+            Spacer()
+        }
+        .padding(.horizontal, 16)
+        .padding(.bottom, 8)
+    }
+    
+    // MARK: - Body Section
+    private var bodySection: some View {
+        HStack {
+            Text(message.body)
+                .font(.subheadline)
+                .lineLimit(nil)
+            Spacer()
+        }
+        .padding(.horizontal, 16)
+        .padding(.bottom, 12)
+    }
+    
+    // MARK: - Voice Section
+    private func voiceSection(url: URL) -> some View {
+        Button {
+            toggleAudio(url: url)
+        } label: {
+            HStack(spacing: 12) {
+                ZStack {
+                    Circle()
+                        .fill(instagramGradient)
+                        .frame(width: 48, height: 48)
+                    
+                    Image(systemName: isPlaying ? "pause.fill" : "play.fill")
+                        .foregroundColor(.white)
+                        .font(.title3)
+                }
+                
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("ボイスメッセージ")
+                        .font(.subheadline)
+                        .fontWeight(.semibold)
+                        .foregroundColor(.primary)
+                    
+                    Text(isPlaying ? "再生中..." : "タップして再生")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+                
+                Spacer()
+                
+                // Waveform animation placeholder
+                HStack(spacing: 2) {
+                    ForEach(0..<5, id: \.self) { i in
+                        RoundedRectangle(cornerRadius: 2)
+                            .fill(Color.gray.opacity(0.3))
+                            .frame(width: 3, height: CGFloat.random(in: 10...25))
+                    }
+                }
+            }
+            .padding(12)
+            .background(Color(uiColor: .systemGray6))
+            .cornerRadius(12)
+        }
+        .padding(.horizontal, 16)
+        .padding(.bottom, 12)
+    }
+    
+    // MARK: - Steal Button
+    private var stealButton: some View {
+        Button {
+            showingUnlockView = true
+        } label: {
+            HStack {
+                Image(systemName: "lock.open.fill")
+                    .font(.headline)
+                
+                Text("この投稿を奪う")
+                    .fontWeight(.bold)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 16)
+            .background(instagramGradient)
+            .foregroundColor(.white)
+            .cornerRadius(12)
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 8)
+    }
+    
+    // MARK: - Report Button
+    private var reportButton: some View {
+        Button {
+            Task { await report() }
+        } label: {
+            if isReporting {
+                ProgressView()
+            } else {
+                Text("不適切な投稿として報告")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
+        }
+        .padding(.top, 8)
+    }
+    
+    // MARK: - Helpers
     private func formatDate(_ date: Date) -> String {
-        let formatter = DateFormatter()
+        let formatter = RelativeDateTimeFormatter()
         formatter.locale = Locale(identifier: "ja_JP")
-        formatter.dateFormat = "yyyy.MM.dd"
-        return formatter.string(from: date)
+        formatter.unitsStyle = .abbreviated
+        return formatter.localizedString(for: date, relativeTo: Date())
     }
     
     private func toggleAudio(url: URL) {
@@ -301,20 +323,44 @@ struct PreviewMessageView: View {
             isPlaying = false
         } else {
             let item = AVPlayerItem(url: url)
-            if audioPlayer == nil { audioPlayer = AVPlayer(playerItem: item) } else { audioPlayer?.replaceCurrentItem(with: item) }
-            if audioPlayer?.currentItem?.currentTime() == audioPlayer?.currentItem?.duration { audioPlayer?.seek(to: .zero) }
-            audioPlayer?.play(); isPlaying = true
-            NotificationCenter.default.addObserver(forName: .AVPlayerItemDidPlayToEndTime, object: audioPlayer?.currentItem, queue: .main) { _ in self.isPlaying = false; self.audioPlayer?.seek(to: .zero) }
+            if audioPlayer == nil {
+                audioPlayer = AVPlayer(playerItem: item)
+            } else {
+                audioPlayer?.replaceCurrentItem(with: item)
+            }
+            if audioPlayer?.currentItem?.currentTime() == audioPlayer?.currentItem?.duration {
+                audioPlayer?.seek(to: .zero)
+            }
+            audioPlayer?.play()
+            isPlaying = true
+            
+            NotificationCenter.default.addObserver(
+                forName: .AVPlayerItemDidPlayToEndTime,
+                object: audioPlayer?.currentItem,
+                queue: .main
+            ) { _ in
+                self.isPlaying = false
+                self.audioPlayer?.seek(to: .zero)
+            }
         }
     }
     
     private func report() async {
-        guard !isReporting else { return }; isReporting = true; defer { isReporting = false }
+        guard !isReporting else { return }
+        isReporting = true
+        defer { isReporting = false }
+        
         do {
             try await service.reportMessage(message)
-            await MainActor.run { reportAlertMessage = "通報を受け付けました。"; showingReportAlert = true }
+            await MainActor.run {
+                reportAlertMessage = "報告を受け付けました。"
+                showingReportAlert = true
+            }
         } catch {
-            await MainActor.run { reportAlertMessage = "通報に失敗しました。"; showingReportAlert = true }
+            await MainActor.run {
+                reportAlertMessage = "報告に失敗しました。"
+                showingReportAlert = true
+            }
         }
     }
 }

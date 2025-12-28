@@ -11,185 +11,74 @@ struct RootView: View {
     
     // MARK: - Navigation State
     @State private var foundMessage: Message?
-    
-    // 1. 自分の投稿 → 詳細画面へ遷移
     @State private var navigateToFoundMessage = false
-    
-    // 2. 他人の投稿 → プレビューシートを表示
     @State private var showingPreviewSheet = false
     
     // 新規作成時用
     @State private var justCreatedMessage: Message?
     @State private var navigateToCreatedMessage = false
+    
+    // 通知シート
+    @State private var showingNotifications = false
 
     private let service = MessageService()
     
-    private var client: SupabaseClient {
-        SupabaseClientManager.shared.client
-    }
-
-    // MARK: - Design Colors & Constants
-    // 画像から抽出したカラーパレット
-    private let slateBlue = Color(red: 88/255, green: 110/255, blue: 125/255) // "OPEN"の文字色
-    private let paperWhite = Color(red: 248/255, green: 248/255, blue: 245/255) // 看板の中身
-    private let bgWall = Color(red: 235/255, green: 235/255, blue: 232/255) // 背景の壁色
+    // MARK: - Instagram Colors
+    private let instagramGradient = LinearGradient(
+        colors: [
+            Color(red: 131/255, green: 58/255, blue: 180/255),   // Purple
+            Color(red: 253/255, green: 29/255, blue: 29/255),    // Red
+            Color(red: 252/255, green: 176/255, blue: 69/255)    // Orange
+        ],
+        startPoint: .topLeading,
+        endPoint: .bottomTrailing
+    )
+    
+    private let subtleGray = Color(red: 250/255, green: 250/255, blue: 250/255)
 
     var body: some View {
         NavigationStack {
             ZStack {
-                // 背景：壁紙のような落ち着いた色
-                bgWall.ignoresSafeArea()
+                // 背景
+                Color.white.ignoresSafeArea()
                 
-                VStack {
-                    Spacer()
+                VStack(spacing: 0) {
+                    // MARK: - Custom Header
+                    headerView
                     
-                    // MARK: - 看板風メインカード
-                    ZStack {
-                        // 1. 白い紙のベース
-                        paperWhite
-                        
-                        // 2. 内側の細い手書き風枠線
-                        Rectangle()
-                            .stroke(slateBlue, lineWidth: 1.5)
-                            .padding(12) // 外枠との隙間
-                        
-                        // 3. コンテンツ
+                    Divider()
+                    
+                    // MARK: - Search Section
+                    searchSection
+                        .padding(.horizontal, 16)
+                        .padding(.top, 20)
+                    
+                    // MARK: - Main Content
+                    ScrollView {
                         VStack(spacing: 24) {
+                            // Hero Section
+                            heroSection
+                                .padding(.top, 20)
                             
-                            // タイトルロゴ部分
-                            VStack(spacing: 8) {
-                                Text("AIKOTOBA") // 画像の"OPEN"に合わせて英語表記風に装飾
-                                    .font(.system(size: 48, weight: .black, design: .default))
-                                    .foregroundColor(slateBlue)
-                                    .tracking(2) // 文字間隔を広げる
-                                
-                                // 下線（筆書き風の線）
-                                Capsule()
-                                    .fill(slateBlue)
-                                    .frame(width: 140, height: 4)
-                                    .rotationEffect(.degrees(-1)) // 少し傾けて手書き感
-                                
-                                Text("please enter keyword") // "please come in" のオマージュ
-                                    .font(.custom("SnellRoundhand", size: 24)) // 筆記体フォント（iOS標準）
-                                    // 筆記体がない場合のフォールバック
-                                    .italic()
-                                    .foregroundColor(.gray)
-                            }
-                            .padding(.top, 20)
+                            // How it works
+                            howItWorksSection
                             
-                            Spacer().frame(height: 10)
-
-                            // 検索フォーム
-                            VStack(spacing: 16) {
-                                TextField("合言葉", text: $keyword)
-                                    .font(.title3)
-                                    .multilineTextAlignment(.center)
-                                    .padding(.vertical, 10)
-                                    .background(Color.clear)
-                                    .overlay(
-                                        Rectangle()
-                                            .frame(height: 1)
-                                            .foregroundColor(slateBlue.opacity(0.5)),
-                                        alignment: .bottom
-                                    )
-                                    .textInputAutocapitalization(.never)
-                                    .disableAutocorrection(true)
-                                    .foregroundColor(slateBlue)
-
-                                Button {
-                                    Task { await search() }
-                                } label: {
-                                    if isLoading {
-                                        ProgressView()
-                                            .tint(.white)
-                                    } else {
-                                        Text("ENTER")
-                                            .font(.headline)
-                                            .tracking(1)
-                                    }
-                                }
-                                .frame(maxWidth: .infinity)
-                                .padding()
-                                .background(
-                                    keyword.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-                                    ? slateBlue.opacity(0.3)
-                                    : slateBlue
-                                )
-                                .foregroundColor(.white)
-                                .cornerRadius(0) // 角張らせてクラシックに
-                            }
-                            .padding(.horizontal, 40)
-                            
-                            if let errorMessage {
-                                Text(errorMessage)
-                                    .foregroundColor(.red)
-                                    .font(.footnote)
-                                    .padding(.bottom, 10)
-                            }
-                        }
-                        .padding(.vertical, 40)
-                    }
-                    .frame(maxWidth: 350) // カードの幅を制限
-                    .aspectRatio(1.3, contentMode: .fit) // 画像のような横長比率に近づける
-                    .background(paperWhite)
-                    // 外側の太い枠
-                    .border(slateBlue, width: 8)
-                    .shadow(color: .black.opacity(0.1), radius: 10, x: 0, y: 5)
-                    
-                    Spacer()
-                }
-            }
-            // ナビゲーションバーの設定（シンプルに）
-            .navigationTitle("") // タイトルは非表示にして看板を目立たせる
-            .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    HStack(spacing: 24) {
-                        NavigationLink {
-                            SettingsView()
-                        } label: {
-                            Image(systemName: "gearshape")
-                                .font(.system(size: 18))
-                                .foregroundColor(slateBlue)
-                        }
-
-                        NavigationLink {
-                            NewMessageView(service: service) { created in
-                                justCreatedMessage = created
-                                Task {
-                                    try? await Task.sleep(nanoseconds: 300_000_000)
-                                    navigateToCreatedMessage = true
-                                }
-                            }
-                        } label: {
-                            Image(systemName: "plus")
-                                .font(.system(size: 20, weight: .regular))
-                                .foregroundColor(slateBlue)
-                        }
-                        
-                        NavigationLink {
-                            MyMessagesView()
-                        } label: {
-                            Image(systemName: "person")
-                                .font(.system(size: 18))
-                                .foregroundColor(slateBlue)
+                            Spacer(minLength: 100)
                         }
                     }
                 }
             }
             // MARK: - Navigation Destinations
-            
             .navigationDestination(isPresented: $navigateToFoundMessage) {
                 if let message = foundMessage {
                     MessageDetailView(message: message, service: service, allowDelete: false)
                 }
             }
-            
             .navigationDestination(isPresented: $navigateToCreatedMessage) {
                 if let message = justCreatedMessage {
                     MessageDetailView(message: message, service: service, allowDelete: true)
                 }
             }
-            
             // MARK: - Preview Sheet
             .sheet(isPresented: $showingPreviewSheet) {
                 if let message = foundMessage {
@@ -199,14 +88,222 @@ struct RootView: View {
                         rootKeyword: $keyword,
                         isPresented: $showingPreviewSheet
                     )
-                    .presentationDetents([.medium, .large])
+                    .presentationDetents([.large])
+                    .presentationDragIndicator(.visible)
                 }
             }
-        } // End NavigationStack
-    } // End body
+            .sheet(isPresented: $showingNotifications) {
+                NotificationsView()
+            }
+            .navigationBarHidden(true)
+        }
+    }
+    
+    // MARK: - Header View
+    private var headerView: some View {
+        HStack {
+            // Logo
+            Text("aikotoba")
+                .font(.system(size: 28, weight: .bold, design: .serif))
+                .italic()
+            
+            Spacer()
+            
+            // Action Buttons
+            HStack(spacing: 20) {
+                // New Post
+                NavigationLink {
+                    NewMessageView(service: service) { created in
+                        justCreatedMessage = created
+                        Task {
+                            try? await Task.sleep(nanoseconds: 300_000_000)
+                            navigateToCreatedMessage = true
+                        }
+                    }
+                } label: {
+                    Image(systemName: "plus.app")
+                        .font(.system(size: 24))
+                        .foregroundColor(.black)
+                }
+                
+                // Notifications
+                Button {
+                    showingNotifications = true
+                } label: {
+                    Image(systemName: "heart")
+                        .font(.system(size: 24))
+                        .foregroundColor(.black)
+                }
+                
+                // My Messages
+                NavigationLink {
+                    MyMessagesView()
+                } label: {
+                    Image(systemName: "person.circle")
+                        .font(.system(size: 24))
+                        .foregroundColor(.black)
+                }
+                
+                // Settings
+                NavigationLink {
+                    SettingsView()
+                } label: {
+                    Image(systemName: "line.3.horizontal")
+                        .font(.system(size: 20))
+                        .foregroundColor(.black)
+                }
+            }
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
+        .background(Color.white)
+    }
+    
+    // MARK: - Search Section
+    private var searchSection: some View {
+        VStack(spacing: 12) {
+            // Search Bar
+            HStack {
+                Image(systemName: "magnifyingglass")
+                    .foregroundColor(.gray)
+                
+                TextField("合言葉を入力", text: $keyword)
+                    .textInputAutocapitalization(.never)
+                    .disableAutocorrection(true)
+                
+                if !keyword.isEmpty {
+                    Button {
+                        keyword = ""
+                    } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .foregroundColor(.gray)
+                    }
+                }
+            }
+            .padding(12)
+            .background(subtleGray)
+            .cornerRadius(12)
+            
+            // Search Button
+            Button {
+                Task { await search() }
+            } label: {
+                HStack {
+                    if isLoading {
+                        ProgressView()
+                            .tint(.white)
+                    } else {
+                        Text("検索")
+                            .fontWeight(.semibold)
+                    }
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 14)
+                .background(
+                    keyword.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                    ? AnyShapeStyle(Color.gray.opacity(0.3))
+                    : AnyShapeStyle(instagramGradient)
+                )
+                .foregroundColor(.white)
+                .cornerRadius(12)
+            }
+            .disabled(keyword.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isLoading)
+            
+            // Error Message
+            if let errorMessage {
+                Text(errorMessage)
+                    .font(.caption)
+                    .foregroundColor(.red)
+                    .padding(.top, 4)
+            }
+        }
+    }
+    
+    // MARK: - Hero Section
+    private var heroSection: some View {
+        VStack(spacing: 16) {
+            // Icon with gradient border
+            ZStack {
+                Circle()
+                    .stroke(instagramGradient, lineWidth: 3)
+                    .frame(width: 100, height: 100)
+                
+                Image(systemName: "lock.shield")
+                    .font(.system(size: 40))
+                    .foregroundStyle(instagramGradient)
+            }
+            
+            VStack(spacing: 8) {
+                Text("秘密の合言葉")
+                    .font(.title2)
+                    .fontWeight(.bold)
+                
+                Text("合言葉を知っている人だけが\nメッセージを見られる")
+                    .font(.subheadline)
+                    .foregroundColor(.secondary)
+                    .multilineTextAlignment(.center)
+            }
+        }
+        .padding(.horizontal, 40)
+    }
+    
+    // MARK: - How It Works Section
+    private var howItWorksSection: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Text("使い方")
+                .font(.headline)
+                .padding(.horizontal, 16)
+            
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 12) {
+                    featureCard(
+                        icon: "pencil.circle.fill",
+                        title: "作成",
+                        description: "合言葉を設定して\nメッセージを投稿",
+                        color: .purple
+                    )
+                    
+                    featureCard(
+                        icon: "magnifyingglass.circle.fill",
+                        title: "検索",
+                        description: "合言葉を入力して\nメッセージを探す",
+                        color: .pink
+                    )
+                    
+                    featureCard(
+                        icon: "lock.circle.fill",
+                        title: "奪取",
+                        description: "暗証番号を当てて\n投稿を奪う",
+                        color: .orange
+                    )
+                }
+                .padding(.horizontal, 16)
+            }
+        }
+    }
+    
+    private func featureCard(icon: String, title: String, description: String, color: Color) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Image(systemName: icon)
+                .font(.system(size: 32))
+                .foregroundColor(color)
+            
+            Text(title)
+                .font(.headline)
+                .foregroundColor(.primary)
+            
+            Text(description)
+                .font(.caption)
+                .foregroundColor(.secondary)
+                .lineLimit(2)
+        }
+        .frame(width: 140, alignment: .leading)
+        .padding(16)
+        .background(subtleGray)
+        .cornerRadius(16)
+    }
 
     // MARK: - Functions
-
     private func search() async {
         errorMessage = nil
         isLoading = true
@@ -235,12 +332,12 @@ struct RootView: View {
             }
         } catch MessageServiceError.notFound {
             await MainActor.run {
-                errorMessage = "Not Found" // 英語の雰囲気に合わせる
+                errorMessage = "この合言葉は見つかりませんでした"
             }
         } catch {
             print("検索エラー詳細: \(error)")
             await MainActor.run {
-                errorMessage = "Error occurred."
+                errorMessage = "エラーが発生しました"
             }
         }
     }

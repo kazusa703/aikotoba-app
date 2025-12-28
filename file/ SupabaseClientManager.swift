@@ -13,7 +13,7 @@ final class SupabaseClientManager {
         let supabaseUrl = URL(string: "https://mdlhncrhfluikvnixryi.supabase.co")!
             
             // ★注意: Settings > API から "anon public" キー（eyJから始まるもの）をコピペしてください
-            let supabaseKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1kbG..."
+            let supabaseKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1kbGhuY3JoZmx1aWt2bml4cnlpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjQ4MDYwNDAsImV4cCI6MjA4MDM4MjA0MH0.WWLY3vDvtCQRpKryT5LLjMWe_-irjKJX9NSgnzwt2js"
 
             self.client = SupabaseClient(
                 supabaseURL: supabaseUrl,

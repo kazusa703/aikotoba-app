@@ -4,7 +4,6 @@ import AVFoundation
 struct MessageDetailView: View {
     @Environment(\.dismiss) private var dismiss
     
-    // MARK: - State Properties
     @State private var displayingMessage: Message
     let service: MessageService
     let allowDelete: Bool
@@ -23,65 +22,115 @@ struct MessageDetailView: View {
     @State private var audioPlayer: AVPlayer?
     @State private var isPlaying = false
     
-    // MARK: - Unlock / Steal State
-    @State private var showingUnlockAlert = false
-    @State private var unlockInput = ""
-    @State private var unlockErrorMessage: String?
+    // Unlock State
+    @State private var showingUnlockView = false
+    @State private var currentImageIndex = 0
+    
+    // Instagram Colors
+    private let instagramGradient = LinearGradient(
+        colors: [
+            Color(red: 131/255, green: 58/255, blue: 180/255),
+            Color(red: 253/255, green: 29/255, blue: 29/255),
+            Color(red: 252/255, green: 176/255, blue: 69/255)
+        ],
+        startPoint: .topLeading,
+        endPoint: .bottomTrailing
+    )
+    
+    private let subtleGray = Color(red: 250/255, green: 250/255, blue: 250/255)
 
-    // MARK: - Init
     init(message: Message, service: MessageService, allowDelete: Bool) {
         _displayingMessage = State(initialValue: message)
         self.service = service
         self.allowDelete = allowDelete
     }
 
-    // MARK: - Body
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            
-            // 所有権チェックによる表示分岐
-            if service.isOwner(of: displayingMessage) {
-                // --- 自分のもの（編集・削除可能） ---
-                contentView(isOwner: true)
-            } else {
-                // --- 他人のもの（閲覧のみ + 奪うボタン） ---
-                contentView(isOwner: false)
+        ScrollView {
+            VStack(spacing: 0) {
+                // MARK: - Header
+                headerSection
+                
+                // MARK: - Image Carousel
+                if let urls = displayingMessage.image_urls, !urls.isEmpty {
+                    imageCarousel(urls: urls)
+                }
+                
+                // MARK: - Action Bar
+                actionBar
+                
+                // MARK: - Stats
+                statsSection
+                
+                // MARK: - Hidden Warning (Owner Only)
+                if service.isOwner(of: displayingMessage) && displayingMessage.is_hidden {
+                    warningBanner
+                }
+                
+                // MARK: - Body
+                if !displayingMessage.body.isEmpty {
+                    bodySection
+                }
+                
+                // MARK: - Voice
+                if let voiceUrl = displayingMessage.voice_url, let url = URL(string: voiceUrl) {
+                    voiceSection(url: url)
+                }
+                
+                // MARK: - Info Message
+                if let infoMessage {
+                    Text(infoMessage)
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                        .padding()
+                }
+                
+                // MARK: - Bottom Actions
+                bottomActions
+                
+                Spacer(minLength: 100)
             }
         }
-        .padding()
-        .navigationTitle("")
+        .background(Color.white)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .navigationBarTrailing) {
-                if service.isOwner(of: displayingMessage) {
-                    // 持ち主なら「編集」
-                    Button("編集") {
-                        isPresentingEditSheet = true
-                    }
-                } else {
-                    // 他人の投稿なら「奪う（鍵アイコン）」
-                    Button {
-                        unlockInput = ""
-                        unlockErrorMessage = nil
-                        showingUnlockAlert = true
-                    } label: {
-                        VStack(spacing: 0) {
-                            Image(systemName: "lock.fill")
-                                .foregroundColor(displayingMessage.is_4_digit ? .green : .orange)
-                            Text("奪う")
-                                .font(.caption2)
-                                .fontWeight(.bold)
-                                .foregroundColor(.primary)
+                Menu {
+                    if service.isOwner(of: displayingMessage) {
+                        Button {
+                            isPresentingEditSheet = true
+                        } label: {
+                            Label("編集", systemImage: "pencil")
+                        }
+                        
+                        if allowDelete {
+                            Button(role: .destructive) {
+                                showingDeleteAlert = true
+                            } label: {
+                                Label("削除", systemImage: "trash")
+                            }
+                        }
+                    } else {
+                        Button {
+                            showingUnlockView = true
+                        } label: {
+                            Label("この投稿を奪う", systemImage: "lock.open")
+                        }
+                        
+                        Button(role: .destructive) {
+                            Task { await report() }
+                        } label: {
+                            Label("報告", systemImage: "flag")
                         }
                     }
+                } label: {
+                    Image(systemName: "ellipsis")
+                        .foregroundColor(.primary)
                 }
             }
         }
-        .onDisappear {
-                    audioPlayer?.pause()
-                }
-                // ★ .task ブロックを削除しました
-                .alert("コピーしました",  isPresented: $showingCopyAlert) {
+        .onDisappear { audioPlayer?.pause() }
+        .alert("コピーしました", isPresented: $showingCopyAlert) {
             Button("OK", role: .cancel) { }
         }
         .alert("削除しますか？", isPresented: $showingDeleteAlert) {
@@ -89,6 +138,8 @@ struct MessageDetailView: View {
                 Task { await deleteMessage() }
             }
             Button("キャンセル", role: .cancel) { }
+        } message: {
+            Text("この操作は取り消せません")
         }
         .sheet(isPresented: $isPresentingEditSheet) {
             NavigationStack {
@@ -103,224 +154,280 @@ struct MessageDetailView: View {
                 )
             }
         }
-        // ロック解除（奪取）用アラート
-        .alert("暗証番号を入力", isPresented: $showingUnlockAlert) {
-            TextField("番号", text: $unlockInput)
-                .keyboardType(.numberPad)
-            Button("キャンセル", role: .cancel) { }
-            Button("解除に挑戦") {
-                Task { await attemptUnlock() }
-            }
-        } message: {
-            if let err = unlockErrorMessage {
-                Text(err)
-            } else {
-                Text("正解すると投稿を奪えます。\n(1日1回のみ)")
-            }
+        .fullScreenCover(isPresented: $showingUnlockView) {
+            UnlockView(
+                service: service,
+                targetMessage: displayingMessage,
+                rootKeyword: .constant("")
+            )
         }
     }
     
-    // MARK: - Subviews
-    
-    // 共通のコンテンツ表示ビュー
-    func contentView(isOwner: Bool) -> some View {
-        VStack(spacing: 16) {
+    // MARK: - Header Section
+    private var headerSection: some View {
+        HStack(spacing: 12) {
+            // Avatar
+            ZStack {
+                Circle()
+                    .stroke(
+                        service.isOwner(of: displayingMessage)
+                        ? instagramGradient
+                        : LinearGradient(colors: [.gray.opacity(0.3)], startPoint: .top, endPoint: .bottom),
+                        lineWidth: 2
+                    )
+                    .frame(width: 44, height: 44)
+                
+                Circle()
+                    .fill(Color.gray.opacity(0.2))
+                    .frame(width: 38, height: 38)
+                
+                Image(systemName: service.isOwner(of: displayingMessage) ? "person.fill.checkmark" : "person.fill")
+                    .foregroundColor(.gray)
+            }
             
-            // 閲覧数・奪取数・防衛数
-                        HStack(spacing: 16) { // 少し間隔を広めに
-                            Spacer()
-                            
-                            // 閲覧数
-                            HStack(spacing: 4) {
-                                Image(systemName: "eye.fill")
-                                Text("\(displayingMessage.view_count)")
-                            }
-                            
-                            // ★追加: 奪われた回数（フラッグ）
-                            HStack(spacing: 4) {
-                                Text("🏴") // SF Symbolsに良い旗がないため絵文字推奨
-                                Text("\(displayingMessage.stolen_count)")
-                            }
-                            
-                            // ★追加: 防衛した回数（爆弾）
-                            HStack(spacing: 4) {
-                                Text("💣")
-                                Text("\(displayingMessage.failed_count)")
-                            }
-                        }
-                        .foregroundColor(.secondary)
-                        .font(.subheadline) // 少し文字サイズを統一
-            
-            ScrollView {
-                VStack(alignment: .leading, spacing: 20) {
+            VStack(alignment: .leading, spacing: 2) {
+                HStack(spacing: 6) {
+                    Text(displayingMessage.keyword)
+                        .font(.subheadline)
+                        .fontWeight(.semibold)
                     
-                    // タイトル（合言葉）
-                    HStack {
-                        Text(displayingMessage.keyword)
-                            .font(.largeTitle)
-                            .fontWeight(.bold)
-                        
-                        Button {
-                            UIPasteboard.general.string = displayingMessage.keyword
-                            showingCopyAlert = true
-                        } label: {
-                            Image(systemName: "doc.on.doc.fill")
-                                .font(.title2)
-                                .foregroundColor(.secondary)
-                        }
-                    }
-                    
-                    // 非公開警告（自分の場合のみ表示）
-                    if isOwner && displayingMessage.is_hidden {
-                                            // ★ここを書き換え
-                                            VStack(alignment: .leading, spacing: 4) {
-                                                Text("⚠️ 非公開 / 削除警告")
-                                                    .fontWeight(.bold)
-                                                Text("現在、この投稿は非公開です。\n奪取から24時間以内に「編集」でパスコードを設定して再公開しない場合、この投稿は自動削除されます。")
-                                            }
-                                            .font(.caption)
-                                            .foregroundColor(.orange)
-                                            .padding()
-                                            .frame(maxWidth: .infinity, alignment: .leading)
-                                            .background(Color.orange.opacity(0.1))
-                                            .cornerRadius(8)
-                                        }
-
-                    // 画像（横スクロール）
-                    if let urls = displayingMessage.image_urls, !urls.isEmpty {
-                        ScrollView(.horizontal, showsIndicators: false) {
-                            HStack {
-                                ForEach(urls, id: \.self) { urlString in
-                                    AsyncImage(url: URL(string: urlString)) { phase in
-                                        switch phase {
-                                        case .empty:
-                                            Color.gray.opacity(0.3)
-                                        case .success(let image):
-                                            image.resizable().scaledToFill()
-                                        case .failure:
-                                            Color.gray.opacity(0.3)
-                                        @unknown default:
-                                            Color.gray.opacity(0.3)
-                                        }
-                                    }
-                                    .frame(width: 300, height: 250)
-                                    .clipped()
-                                    .cornerRadius(12)
-                                }
-                            }
-                        }
-                    }
-                    
-                    // 本文
-                    Text(displayingMessage.body)
-                        .font(.body)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                    
-                    // ボイスメッセージ
-                    if let voiceUrl = displayingMessage.voice_url, let url = URL(string: voiceUrl) {
-                        Button {
-                            toggleAudio(url: url)
-                        } label: {
-                            HStack {
-                                Image(systemName: isPlaying ? "pause.circle.fill" : "play.circle.fill")
-                                    .resizable()
-                                    .frame(width: 44, height: 44)
-                                    .foregroundColor(.blue)
-                                
-                                Text(isPlaying ? "再生中" : "ボイスを再生")
-                                    .fontWeight(.bold)
-                                    .foregroundColor(.primary)
-                            }
-                        }
-                        .padding()
-                        .background(Color(uiColor: .secondarySystemBackground))
-                        .cornerRadius(12)
+                    // Copy button
+                    Button {
+                        UIPasteboard.general.string = displayingMessage.keyword
+                        showingCopyAlert = true
+                    } label: {
+                        Image(systemName: "doc.on.doc")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
                     }
                 }
-            }
-            
-            if let infoMessage {
-                Text(infoMessage)
-                    .font(.footnote)
+                
+                Text(formatDate(displayingMessage.createdAt))
+                    .font(.caption)
                     .foregroundColor(.secondary)
             }
-
+            
             Spacer()
             
-            // ボタンエリア
-            HStack {
-                // 自分以外なら通報ボタン
-                if !isOwner {
-                    Button(role: .destructive) {
-                        Task { await report() }
-                    } label: {
-                        if isReporting {
-                            ProgressView()
-                        } else {
-                            Text("通報")
-                        }
-                    }
+            // Owner badge
+            if service.isOwner(of: displayingMessage) {
+                Text("あなたの投稿")
+                    .font(.caption2)
+                    .fontWeight(.medium)
+                    .foregroundColor(.white)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 4)
+                    .background(instagramGradient)
+                    .cornerRadius(12)
+            }
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
+    }
+    
+    // MARK: - Image Carousel
+    private func imageCarousel(urls: [String]) -> some View {
+        TabView(selection: $currentImageIndex) {
+            ForEach(urls.indices, id: \.self) { index in
+                AsyncImage(url: URL(string: urls[index])) { image in
+                    image
+                        .resizable()
+                        .scaledToFill()
+                } placeholder: {
+                    Rectangle()
+                        .fill(Color.gray.opacity(0.1))
+                        .overlay(ProgressView())
+                }
+                .frame(maxWidth: .infinity)
+                .frame(height: 400)
+                .clipped()
+                .tag(index)
+            }
+        }
+        .tabViewStyle(.page(indexDisplayMode: urls.count > 1 ? .automatic : .never))
+        .frame(height: 400)
+    }
+    
+    // MARK: - Action Bar
+    private var actionBar: some View {
+        HStack(spacing: 20) {
+            // Stats
+            HStack(spacing: 4) {
+                Image(systemName: "eye.fill")
+                Text("\(displayingMessage.view_count)")
+            }
+            .foregroundColor(.secondary)
+            
+            HStack(spacing: 4) {
+                Image(systemName: "flag.fill")
+                Text("\(displayingMessage.stolen_count)")
+            }
+            .foregroundColor(.green)
+            
+            HStack(spacing: 4) {
+                Image(systemName: "shield.fill")
+                Text("\(displayingMessage.failed_count)")
+            }
+            .foregroundColor(.red)
+            
+            Spacer()
+            
+            // Lock status
+            HStack(spacing: 4) {
+                Image(systemName: "lock.fill")
+                Text(displayingMessage.is_4_digit ? "4桁" : "3桁")
+            }
+            .font(.caption)
+            .foregroundColor(displayingMessage.is_4_digit ? .green : .orange)
+        }
+        .font(.subheadline)
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
+    }
+    
+    // MARK: - Stats Section
+    private var statsSection: some View {
+        HStack {
+            Text("\(displayingMessage.view_count)回閲覧")
+                .font(.subheadline)
+                .fontWeight(.semibold)
+            Spacer()
+        }
+        .padding(.horizontal, 16)
+        .padding(.bottom, 8)
+    }
+    
+    // MARK: - Warning Banner
+    private var warningBanner: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .foregroundColor(.orange)
+            
+            VStack(alignment: .leading, spacing: 2) {
+                Text("非公開状態")
+                    .font(.subheadline)
+                    .fontWeight(.semibold)
+                
+                Text("24時間以内に編集して再公開しないと削除されます")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
+            
+            Spacer()
+        }
+        .padding(12)
+        .background(Color.orange.opacity(0.1))
+        .cornerRadius(12)
+        .padding(.horizontal, 16)
+        .padding(.bottom, 12)
+    }
+    
+    // MARK: - Body Section
+    private var bodySection: some View {
+        HStack {
+            Text(displayingMessage.body)
+                .font(.subheadline)
+                .lineLimit(nil)
+            Spacer()
+        }
+        .padding(.horizontal, 16)
+        .padding(.bottom, 12)
+    }
+    
+    // MARK: - Voice Section
+    private func voiceSection(url: URL) -> some View {
+        Button {
+            toggleAudio(url: url)
+        } label: {
+            HStack(spacing: 12) {
+                ZStack {
+                    Circle()
+                        .fill(instagramGradient)
+                        .frame(width: 48, height: 48)
+                    
+                    Image(systemName: isPlaying ? "pause.fill" : "play.fill")
+                        .foregroundColor(.white)
+                        .font(.title3)
+                }
+                
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("ボイスメッセージ")
+                        .font(.subheadline)
+                        .fontWeight(.semibold)
+                        .foregroundColor(.primary)
+                    
+                    Text(isPlaying ? "再生中..." : "タップして再生")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
                 }
                 
                 Spacer()
                 
-                // 自分のみ削除ボタン
-                if allowDelete && isOwner {
-                    Button("削除", role: .destructive) {
-                        showingDeleteAlert = true
+                // Waveform placeholder
+                HStack(spacing: 2) {
+                    ForEach(0..<5, id: \.self) { _ in
+                        RoundedRectangle(cornerRadius: 2)
+                            .fill(Color.gray.opacity(0.3))
+                            .frame(width: 3, height: CGFloat.random(in: 10...25))
                     }
                 }
             }
+            .padding(12)
+            .background(subtleGray)
+            .cornerRadius(12)
         }
+        .padding(.horizontal, 16)
+        .padding(.bottom, 12)
     }
     
-    // MARK: - Logic Methods
-    
-    private func attemptUnlock() async {
-            unlockErrorMessage = nil
-            
-            do {
-                // ★修正: message.id ではなく displayingMessage.id を使います
-                let result = try await service.attemptSteal(messageId: displayingMessage.id, guess: unlockInput)
-                
-                if result == "success" {
-                    // 成功したら画面を閉じる
-                    await MainActor.run {
-                        dismiss()
+    // MARK: - Bottom Actions
+    private var bottomActions: some View {
+        VStack(spacing: 12) {
+            if !service.isOwner(of: displayingMessage) {
+                // Steal button for non-owners
+                Button {
+                    showingUnlockView = true
+                } label: {
+                    HStack {
+                        Image(systemName: "lock.open.fill")
+                        Text("この投稿を奪う")
+                            .fontWeight(.bold)
                     }
-                } else if result == "limit_exceeded" {
-                    unlockErrorMessage = "本日の挑戦回数は終了しました。"
-                    showingUnlockAlert = true
-                } else {
-                    unlockErrorMessage = "番号が違います..."
-                    showingUnlockAlert = true
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 16)
+                    .background(instagramGradient)
+                    .foregroundColor(.white)
+                    .cornerRadius(12)
                 }
-            } catch {
-                unlockErrorMessage = "エラーが発生しました。"
-                showingUnlockAlert = true
+                .padding(.horizontal, 16)
+            } else {
+                // Edit button for owners
+                Button {
+                    isPresentingEditSheet = true
+                } label: {
+                    HStack {
+                        Image(systemName: "pencil")
+                        Text("編集する")
+                            .fontWeight(.semibold)
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 16)
+                    .background(Color.black)
+                    .foregroundColor(.white)
+                    .cornerRadius(12)
+                }
+                .padding(.horizontal, 16)
             }
         }
-    
-    private func report() async {
-        guard !isReporting else { return }
-        isReporting = true
-        defer { isReporting = false }
-        
-        try? await service.reportMessage(displayingMessage)
-        await MainActor.run {
-            infoMessage = "通報しました"
-        }
+        .padding(.top, 16)
     }
     
-    private func deleteMessage() async {
-        guard !isDeleting else { return }
-        isDeleting = true
-        defer { isDeleting = false }
-        
-        try? await service.deleteMessage(displayingMessage)
-        await MainActor.run {
-            dismiss()
-        }
+    // MARK: - Helper Methods
+    private func formatDate(_ date: Date) -> String {
+        let formatter = RelativeDateTimeFormatter()
+        formatter.locale = Locale(identifier: "ja_JP")
+        formatter.unitsStyle = .abbreviated
+        return formatter.localizedString(for: date, relativeTo: Date())
     }
     
     private func toggleAudio(url: URL) {
@@ -350,6 +457,28 @@ struct MessageDetailView: View {
                 self.isPlaying = false
                 self.audioPlayer?.seek(to: .zero)
             }
+        }
+    }
+    
+    private func report() async {
+        guard !isReporting else { return }
+        isReporting = true
+        defer { isReporting = false }
+        
+        try? await service.reportMessage(displayingMessage)
+        await MainActor.run {
+            infoMessage = "報告しました"
+        }
+    }
+    
+    private func deleteMessage() async {
+        guard !isDeleting else { return }
+        isDeleting = true
+        defer { isDeleting = false }
+        
+        try? await service.deleteMessage(displayingMessage)
+        await MainActor.run {
+            dismiss()
         }
     }
 }
