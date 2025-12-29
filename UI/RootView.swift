@@ -19,6 +19,9 @@ struct RootView: View {
     
     // 新規投稿
     @State private var showingNewMessageSheet = false
+    
+    // 認証促進シート
+    @State private var showingAuthPrompt = false
 
     private let service = MessageService()
     
@@ -45,6 +48,11 @@ struct RootView: View {
         NavigationStack {
             ScrollView {
                 VStack(spacing: 24) {
+                    // ゲストモードバナー
+                    if sessionStore.isGuestMode {
+                        guestModeBanner
+                    }
+                    
                     // MARK: - Search Section
                     searchSection
                     
@@ -64,7 +72,11 @@ struct RootView: View {
                     HStack(spacing: 20) {
                         // 新規投稿
                         Button {
-                            showingNewMessageSheet = true
+                            if sessionStore.isGuestMode {
+                                showingAuthPrompt = true
+                            } else {
+                                showingNewMessageSheet = true
+                            }
                         } label: {
                             Image(systemName: "plus.app")
                                 .font(.system(size: 22))
@@ -135,7 +147,46 @@ struct RootView: View {
                     }
                 }
             }
+            // Auth Prompt Sheet
+            .sheet(isPresented: $showingAuthPrompt) {
+                AuthPromptView(feature: "投稿")
+            }
         }
+    }
+    
+    // MARK: - Guest Mode Banner
+    private var guestModeBanner: some View {
+        HStack(spacing: 12) {
+            Image(systemName: "person.fill.questionmark")
+                .foregroundColor(.orange)
+            
+            VStack(alignment: .leading, spacing: 2) {
+                Text("ゲストモード")
+                    .font(.subheadline)
+                    .fontWeight(.semibold)
+                Text("一部機能が制限されています")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
+            
+            Spacer()
+            
+            Button {
+                showingAuthPrompt = true
+            } label: {
+                Text("ログイン")
+                    .font(.caption)
+                    .fontWeight(.bold)
+                    .foregroundColor(.white)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 6)
+                    .background(instagramGradient)
+                    .cornerRadius(12)
+            }
+        }
+        .padding(12)
+        .background(Color.orange.opacity(0.1))
+        .cornerRadius(12)
     }
     
     // MARK: - Search Section

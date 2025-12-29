@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>CFBundleURLName</key>
+			<string>aikotoba</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>aikotoba</string>
+			</array>
+		</dict>
+		<dict>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>CFBundleURLName</key>
+			<string>com.imai.aikotoba.google</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>448622474624-v2l7u93grgea3nl3ccdacrncam916ehi.apps.googleusercontent.com</string>
+			</array>
+		</dict>
+	</array>
+</dict>
+</plist>

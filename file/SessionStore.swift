@@ -5,6 +5,7 @@ import Supabase
 @MainActor
 final class SessionStore: ObservableObject {
     @Published var isSignedIn: Bool = false
+    @Published var isGuestMode: Bool = false
 
     private var client: SupabaseClient {
         SupabaseClientManager.shared.client
@@ -21,19 +22,31 @@ final class SessionStore: ObservableObject {
         do {
             let session = try await client.auth.session
             isSignedIn = (session != nil)
+            if isSignedIn {
+                isGuestMode = false
+            }
         } catch {
             // セッション取得に失敗したら未ログイン扱い
             isSignedIn = false
         }
+    }
+    
+    func enterGuestMode() {
+        isGuestMode = true
+        isSignedIn = false
+    }
+    
+    func exitGuestMode() {
+        isGuestMode = false
     }
 
     func signOut() async {
         do {
             try await client.auth.signOut()
         } catch {
-            // ログだけ吐いて無視でもOK
             print("Sign out error: \(error)")
         }
         isSignedIn = false
+        isGuestMode = false
     }
 }

@@ -20,6 +20,8 @@
 		AC739A552EE54CF500FFD594 /* StealSuccessView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC739A542EE54CF500FFD594 /* StealSuccessView.swift */; };
 		AC739A572EE5528D00FFD594 /* PreviewMessageView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC739A562EE5528D00FFD594 /* PreviewMessageView.swift */; };
 		ACD312D22F01DAC500E076C4 /* Products.storekit in Resources */ = {isa = PBXBuildFile; fileRef = ACD312D12F01DAC500E076C4 /* Products.storekit */; };
+		ACD312DA2F02DC0200E076C4 /* Authpromptview.swift in Sources */ = {isa = PBXBuildFile; fileRef = ACD312D92F02DC0200E076C4 /* Authpromptview.swift */; };
+		ACD312DC2F02DE6600E076C4 /* Googlelogoview.swift in Sources */ = {isa = PBXBuildFile; fileRef = ACD312DB2F02DE6600E076C4 /* Googlelogoview.swift */; };
 		ACE941722EE9567600FD58B5 /* NotificationsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = ACE941712EE9567600FD58B5 /* NotificationsView.swift */; };
 /* End PBXBuildFile section */
 
@@ -35,6 +37,10 @@
 		AC739A542EE54CF500FFD594 /* StealSuccessView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StealSuccessView.swift; sourceTree = "<group>"; };
 		AC739A562EE5528D00FFD594 /* PreviewMessageView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PreviewMessageView.swift; sourceTree = "<group>"; };
 		ACD312D12F01DAC500E076C4 /* Products.storekit */ = {isa = PBXFileReference; lastKnownFileType = text; path = Products.storekit; sourceTree = "<group>"; };
+		ACD312D92F02DC0200E076C4 /* Authpromptview.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Authpromptview.swift; sourceTree = "<group>"; };
+		ACD312DB2F02DE6600E076C4 /* Googlelogoview.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Googlelogoview.swift; sourceTree = "<group>"; };
+		ACD312DD2F02DEAE00E076C4 /* aikotoba.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = aikotoba.entitlements; sourceTree = "<group>"; };
+		ACD312DE2F02DEBB00E076C4 /* aikotoba-Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = "aikotoba-Info.plist"; sourceTree = "<group>"; };
 		ACE941712EE9567600FD58B5 /* NotificationsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationsView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -63,6 +69,8 @@
 		AC2713152EE12880007C9A64 = {
 			isa = PBXGroup;
 			children = (
+				ACD312DE2F02DEBB00E076C4 /* aikotoba-Info.plist */,
+				ACD312DD2F02DEAE00E076C4 /* aikotoba.entitlements */,
 				ACD312D12F01DAC500E076C4 /* Products.storekit */,
 				AC2713382EE12B56007C9A64 /* UI */,
 				AC2713202EE12880007C9A64 /* file */,
@@ -92,6 +100,8 @@
 				AC739A542EE54CF500FFD594 /* StealSuccessView.swift */,
 				AC739A562EE5528D00FFD594 /* PreviewMessageView.swift */,
 				ACE941712EE9567600FD58B5 /* NotificationsView.swift */,
+				ACD312D92F02DC0200E076C4 /* Authpromptview.swift */,
+				ACD312DB2F02DE6600E076C4 /* Googlelogoview.swift */,
 			);
 			path = UI;
 			sourceTree = "<group>";
@@ -189,11 +199,13 @@
 				AC27133C2EE12BA2007C9A64 /* NewMessageView.swift in Sources */,
 				AC2713612EE40437007C9A64 /* SettingsView.swift in Sources */,
 				ACE941722EE9567600FD58B5 /* NotificationsView.swift in Sources */,
+				ACD312DC2F02DE6600E076C4 /* Googlelogoview.swift in Sources */,
 				AC27133A2EE12B85007C9A64 /* RootView.swift in Sources */,
 				AC27133E2EE12BC8007C9A64 /* MessageDetailView.swift in Sources */,
 				AC27134D2EE19E5C007C9A64 /* MyMessagesView.swift in Sources */,
 				AC739A552EE54CF500FFD594 /* StealSuccessView.swift in Sources */,
 				AC739A532EE54CDD00FFD594 /* UnlockView.swift in Sources */,
+				ACD312DA2F02DC0200E076C4 /* Authpromptview.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -324,12 +336,14 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = aikotoba.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = WM7939G226;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_KEY_NSMicrophoneUsageDescription = "ボイスメッセージを録音するために使用します";
+				INFOPLIST_FILE = "aikotoba-Info.plist";
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "「声」を録音してマッチングに使用するためにマイクへのアクセスが必要です。";
 				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "投稿する画像を選択するために写真ライブラリにアクセスします";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
@@ -363,12 +377,14 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = aikotoba.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = WM7939G226;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_KEY_NSMicrophoneUsageDescription = "ボイスメッセージを録音するために使用します";
+				INFOPLIST_FILE = "aikotoba-Info.plist";
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "「声」を録音してマッチングに使用するためにマイクへのアクセスが必要です。";
 				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "投稿する画像を選択するために写真ライブラリにアクセスします";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
