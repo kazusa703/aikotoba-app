@@ -1,32 +1,38 @@
 import SwiftUI
-import AVFoundation
 import PhotosUI
+import AVFoundation
 
 struct NewMessageView: View {
     @Environment(\.dismiss) private var dismiss
-    let editingMessage: Message?
-
-    @State private var keyword: String
-    @State private var bodyText: String
-    @State private var passcode: String = ""
-    @State private var is4DigitMode: Bool = false
+    @StateObject private var storeKit = StoreKitManager.shared
     
+    let service: MessageService
+    var editingMessage: Message?
+    var onCompleted: ((Message) -> Void)?
+    
+    // Form State
+    @State private var keyword = ""
+    @State private var messageBody = ""
+    @State private var passcode = ""
+    @State private var selectedLength: Int = 3
+    
+    // Photo State
+    @State private var selectedItems: [PhotosPickerItem] = []
+    @State private var selectedImagesData: [Data] = []
+    @State private var existingImageUrls: [String] = []
+    
+    // Voice State
+    @State private var voiceData: Data?
+    @State private var isRecording = false
+    @State private var audioRecorder: AVAudioRecorder?
+    @State private var shouldDeleteVoice = false
+    
+    // UI State
     @State private var isLoading = false
     @State private var errorMessage: String?
-
-    @State private var audioRecorder: AVAudioRecorder?
-    @State private var isRecording = false
-    @State private var recordedFileURL: URL?
-    @State private var audioPlayer: AVPlayer?
-    @State private var isPlayingPreview = false
-    @State private var isExistingVoiceDeleted = false
-    @State private var selectedPhotoItems: [PhotosPickerItem] = []
-    @State private var newSelectedImages: [UIImage] = []
-    @State private var remainingImageUrls: [String] = []
-
-    let service: MessageService
-    let onCompleted: (Message) -> Void
-
+    @State private var showingUpgradeSheet = false
+    @State private var upgradeTargetLength = 4
+    
     // Instagram Colors
     private let instagramGradient = LinearGradient(
         colors: [
@@ -39,297 +45,175 @@ struct NewMessageView: View {
     )
     
     private let subtleGray = Color(red: 250/255, green: 250/255, blue: 250/255)
-
-    init(service: MessageService, editingMessage: Message? = nil, onCompleted: @escaping (Message) -> Void) {
-        self.service = service
-        self.editingMessage = editingMessage
-        self.onCompleted = onCompleted
-        
-        _keyword = State(initialValue: editingMessage?.keyword ?? "")
-        _bodyText = State(initialValue: editingMessage?.body ?? "")
-        
-        if let message = editingMessage, let urls = message.image_urls {
-            _remainingImageUrls = State(initialValue: urls)
-        }
-        if let message = editingMessage {
-            _is4DigitMode = State(initialValue: message.is_4_digit)
-            _passcode = State(initialValue: message.passcode == "000" ? "" : message.passcode)
-        }
-    }
     
-    var isEditing: Bool { editingMessage != nil }
+    private var isEditing: Bool { editingMessage != nil }
     
-    var isPasscodeEditable: Bool {
-        guard let msg = editingMessage else { return true }
-        return msg.is_hidden
-    }
-
     var body: some View {
-        NavigationStack {
-            ScrollView {
-                VStack(spacing: 24) {
-                    // MARK: - Media Section
-                    mediaSection
-                    
-                    // MARK: - Keyword Section
-                    keywordSection
-                    
-                    // MARK: - Passcode Section
-                    passcodeSection
-                    
-                    // MARK: - Body Section
-                    bodySection
-                    
-                    // MARK: - Voice Section
-                    voiceSection
-                    
-                    // Error Message
-                    if let errorMessage {
-                        Text(errorMessage)
-                            .font(.caption)
-                            .foregroundColor(.red)
-                            .padding(.horizontal)
-                    }
-                    
-                    Spacer(minLength: 100)
-                }
-                .padding(.top, 16)
-            }
-            .background(Color.white)
-            .navigationTitle(isEditing ? "編集" : "新規投稿")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarLeading) {
-                    Button("キャンセル") {
-                        dismiss()
-                    }
-                    .foregroundColor(.primary)
+        ScrollView {
+            VStack(spacing: 20) {
+                // MARK: - Photo Section
+                photoSection
+                
+                // MARK: - Keyword Section
+                keywordSection
+                
+                // MARK: - Body Section
+                bodySection
+                
+                // MARK: - Passcode Section
+                passcodeSection
+                
+                // MARK: - Voice Section
+                voiceSection
+                
+                // MARK: - Error
+                if let errorMessage {
+                    Text(errorMessage)
+                        .font(.caption)
+                        .foregroundColor(.red)
+                        .padding(.horizontal)
                 }
                 
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button {
-                        Task { await submit() }
-                    } label: {
-                        if isLoading {
-                            ProgressView()
-                        } else {
-                            Text(isEditing ? "更新" : "シェア")
-                                .fontWeight(.bold)
-                                .foregroundStyle(canSubmit ? instagramGradient : LinearGradient(colors: [.gray], startPoint: .leading, endPoint: .trailing))
-                        }
-                    }
-                    .disabled(!canSubmit || isLoading)
-                }
+                Spacer(minLength: 100)
             }
-            .onAppear { requestMicrophonePermission() }
-            .onDisappear { audioPlayer?.pause() }
+            .padding(.top, 16)
+        }
+        .background(Color.white)
+        .navigationTitle(isEditing ? "編集" : "新規投稿")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .navigationBarLeading) {
+                Button("キャンセル") { dismiss() }
+                    .foregroundColor(.primary)
+            }
+            
+            ToolbarItem(placement: .navigationBarTrailing) {
+                Button {
+                    Task { await save() }
+                } label: {
+                    if isLoading {
+                        ProgressView()
+                    } else {
+                        Text(isEditing ? "更新" : "投稿")
+                            .fontWeight(.bold)
+                            .foregroundColor(.white)
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 8)
+                            .background(canSubmit ? instagramGradient : LinearGradient(colors: [.gray], startPoint: .leading, endPoint: .trailing))
+                            .cornerRadius(20)
+                    }
+                }
+                .disabled(!canSubmit || isLoading)
+            }
+        }
+        .onAppear { loadEditingMessage() }
+        .onChange(of: selectedItems) { _, items in
+            Task { await loadImages(from: items) }
+        }
+        .sheet(isPresented: $showingUpgradeSheet) {
+            upgradeSheetView
         }
     }
     
-    // MARK: - Media Section
-    private var mediaSection: some View {
+    private var canSubmit: Bool {
+        !keyword.isEmpty && passcode.count == selectedLength
+    }
+    
+    // MARK: - Photo Section
+    private var photoSection: some View {
         VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                Text("写真")
-                    .font(.subheadline)
-                    .fontWeight(.semibold)
-                
-                Spacer()
-                
-                if remainingImageUrls.count + newSelectedImages.count > 0 {
-                    Text("\(remainingImageUrls.count + newSelectedImages.count)/5")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                }
-            }
-            .padding(.horizontal)
+            Text("写真")
+                .font(.subheadline)
+                .fontWeight(.semibold)
+                .padding(.horizontal)
             
-            // Image Preview
-            if !remainingImageUrls.isEmpty || !newSelectedImages.isEmpty {
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 12) {
-                        // Existing images
-                        ForEach(remainingImageUrls, id: \.self) { url in
-                            ZStack(alignment: .topTrailing) {
-                                AsyncImage(url: URL(string: url)) { image in
-                                    image.resizable().scaledToFill()
-                                } placeholder: {
-                                    Color.gray.opacity(0.2)
-                                }
-                                .frame(width: 120, height: 120)
-                                .clipped()
-                                .cornerRadius(12)
-                                
-                                deleteButton { removeExistingImage(url: url) }
-                            }
-                        }
-                        
-                        // New images
-                        ForEach(newSelectedImages.indices, id: \.self) { index in
-                            ZStack(alignment: .topTrailing) {
-                                Image(uiImage: newSelectedImages[index])
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 12) {
+                    // Existing images
+                    ForEach(existingImageUrls, id: \.self) { url in
+                        ZStack(alignment: .topTrailing) {
+                            AsyncImage(url: URL(string: url)) { image in
+                                image
                                     .resizable()
                                     .scaledToFill()
-                                    .frame(width: 120, height: 120)
-                                    .clipped()
+                            } placeholder: {
+                                Rectangle().fill(Color.gray.opacity(0.2))
+                            }
+                            .frame(width: 100, height: 100)
+                            .cornerRadius(12)
+                            .clipped()
+                            
+                            Button {
+                                existingImageUrls.removeAll { $0 == url }
+                            } label: {
+                                Image(systemName: "xmark.circle.fill")
+                                    .foregroundColor(.white)
+                                    .background(Circle().fill(.black.opacity(0.5)))
+                            }
+                            .padding(4)
+                        }
+                    }
+                    
+                    // New images
+                    ForEach(selectedImagesData.indices, id: \.self) { index in
+                        ZStack(alignment: .topTrailing) {
+                            if let uiImage = UIImage(data: selectedImagesData[index]) {
+                                Image(uiImage: uiImage)
+                                    .resizable()
+                                    .scaledToFill()
+                                    .frame(width: 100, height: 100)
                                     .cornerRadius(12)
-                                
-                                deleteButton { removeNewImage(at: index) }
+                                    .clipped()
                             }
-                        }
-                        
-                        // Add button
-                        if remainingImageUrls.count + newSelectedImages.count < 5 {
-                            PhotosPicker(
-                                selection: $selectedPhotoItems,
-                                maxSelectionCount: 5 - (remainingImageUrls.count + newSelectedImages.count),
-                                matching: .images
-                            ) {
-                                VStack(spacing: 8) {
-                                    Image(systemName: "plus")
-                                        .font(.title2)
-                                    Text("追加")
-                                        .font(.caption)
-                                }
-                                .foregroundColor(.gray)
-                                .frame(width: 120, height: 120)
-                                .background(subtleGray)
-                                .cornerRadius(12)
+                            
+                            Button {
+                                selectedImagesData.remove(at: index)
+                            } label: {
+                                Image(systemName: "xmark.circle.fill")
+                                    .foregroundColor(.white)
+                                    .background(Circle().fill(.black.opacity(0.5)))
                             }
+                            .padding(4)
                         }
                     }
-                    .padding(.horizontal)
-                }
-            } else {
-                // Empty state - Photo picker
-                PhotosPicker(
-                    selection: $selectedPhotoItems,
-                    maxSelectionCount: 5,
-                    matching: .images
-                ) {
-                    VStack(spacing: 12) {
-                        Image(systemName: "photo.on.rectangle.angled")
-                            .font(.system(size: 40))
-                            .foregroundColor(.gray)
-                        
-                        Text("写真を追加")
-                            .font(.subheadline)
-                            .foregroundColor(.gray)
+                    
+                    // Add button
+                    PhotosPicker(selection: $selectedItems, maxSelectionCount: 5, matching: .images) {
+                        VStack {
+                            Image(systemName: "plus")
+                                .font(.title2)
+                            Text("追加")
+                                .font(.caption)
+                        }
+                        .foregroundColor(.secondary)
+                        .frame(width: 100, height: 100)
+                        .background(subtleGray)
+                        .cornerRadius(12)
                     }
-                    .frame(maxWidth: .infinity)
-                    .frame(height: 200)
-                    .background(subtleGray)
-                    .cornerRadius(16)
                 }
                 .padding(.horizontal)
             }
-        }
-        .onChange(of: selectedPhotoItems) { _, new in
-            loadNewImages(from: new)
         }
     }
     
     // MARK: - Keyword Section
     private var keywordSection: some View {
         VStack(alignment: .leading, spacing: 8) {
-            HStack {
-                Text("合言葉")
-                    .font(.subheadline)
-                    .fontWeight(.semibold)
-                
-                Text("*必須")
-                    .font(.caption)
-                    .foregroundColor(.red)
-                
-                if isEditing {
-                    Text("（変更不可）")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                }
-            }
+            Text("合言葉")
+                .font(.subheadline)
+                .fontWeight(.semibold)
             
-            TextField("世界でひとつだけの合言葉", text: $keyword)
-                .padding(14)
-                .background(subtleGray)
+            TextField("秘密の合言葉を入力", text: $keyword)
+                .padding(16)
+                .background(isEditing ? Color.gray.opacity(0.1) : subtleGray)
                 .cornerRadius(12)
-                .textInputAutocapitalization(.never)
-                .disableAutocorrection(true)
                 .disabled(isEditing)
-                .opacity(isEditing ? 0.6 : 1)
-        }
-        .padding(.horizontal)
-    }
-    
-    // MARK: - Passcode Section
-    private var passcodeSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                Text("暗証番号")
-                    .font(.subheadline)
-                    .fontWeight(.semibold)
-                
-                Text("*必須")
+            
+            if isEditing {
+                Text("合言葉は変更できません")
                     .font(.caption)
-                    .foregroundColor(.red)
-                
-                Spacer()
-                
-                if isPasscodeEditable {
-                    // Toggle Button
-                    Button {
-                        withAnimation {
-                            is4DigitMode.toggle()
-                            passcode = ""
-                        }
-                    } label: {
-                        HStack(spacing: 4) {
-                            Image(systemName: is4DigitMode ? "lock.fill" : "lock.open.fill")
-                            Text(is4DigitMode ? "4桁モード" : "3桁モード")
-                        }
-                        .font(.caption)
-                        .fontWeight(.medium)
-                        .foregroundColor(is4DigitMode ? .green : .orange)
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 6)
-                        .background(
-                            Capsule()
-                                .fill(is4DigitMode ? Color.green.opacity(0.1) : Color.orange.opacity(0.1))
-                        )
-                    }
-                }
+                    .foregroundColor(.secondary)
             }
-            
-            HStack(spacing: 12) {
-                // Passcode Input
-                HStack {
-                    Image(systemName: "key.fill")
-                        .foregroundColor(.gray)
-                    
-                    TextField(is4DigitMode ? "0000〜9999" : "000〜999", text: $passcode)
-                        .keyboardType(.numberPad)
-                        .disabled(!isPasscodeEditable)
-                }
-                .padding(14)
-                .background(subtleGray)
-                .cornerRadius(12)
-                .opacity(isPasscodeEditable ? 1 : 0.6)
-                .onChange(of: passcode) { _, val in
-                    let limit = is4DigitMode ? 4 : 3
-                    if val.count > limit {
-                        passcode = String(val.prefix(limit))
-                    }
-                }
-            }
-            
-            // Security info
-            HStack(spacing: 6) {
-                Image(systemName: "info.circle")
-                Text(is4DigitMode
-                     ? "4桁は解読が難しく、投稿を守りやすくなります"
-                     : "3桁は1000通り。他の人に奪われる可能性があります")
-            }
-            .font(.caption)
-            .foregroundColor(.secondary)
         }
         .padding(.horizontal)
     }
@@ -342,22 +226,141 @@ struct NewMessageView: View {
                 .fontWeight(.semibold)
             
             ZStack(alignment: .topLeading) {
-                if bodyText.isEmpty {
-                    Text("メッセージを入力...")
-                        .foregroundColor(.gray.opacity(0.6))
-                        .padding(.horizontal, 14)
-                        .padding(.vertical, 16)
-                }
-                
-                TextEditor(text: $bodyText)
+                TextEditor(text: $messageBody)
                     .frame(minHeight: 120)
-                    .padding(10)
-                    .scrollContentBackground(.hidden)
+                    .padding(12)
                     .background(subtleGray)
                     .cornerRadius(12)
+                
+                if messageBody.isEmpty {
+                    Text("メッセージを入力（任意）")
+                        .foregroundColor(.gray.opacity(0.5))
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 20)
+                        .allowsHitTesting(false)
+                }
             }
         }
         .padding(.horizontal)
+    }
+    
+    // MARK: - Passcode Section
+    private var passcodeSection: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            HStack {
+                Text("暗証番号")
+                    .font(.subheadline)
+                    .fontWeight(.semibold)
+                
+                Spacer()
+                
+                // Current length badge
+                HStack(spacing: 4) {
+                    Image(systemName: "lock.fill")
+                    Text("\(selectedLength)桁")
+                }
+                .font(.caption)
+                .foregroundColor(securityColor(for: selectedLength))
+                .padding(.horizontal, 10)
+                .padding(.vertical, 4)
+                .background(
+                    Capsule()
+                        .fill(securityColor(for: selectedLength).opacity(0.1))
+                )
+            }
+            
+            // Length selection (horizontal scroll)
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 8) {
+                    ForEach(3...10, id: \.self) { length in
+                        lengthButton(length: length)
+                    }
+                }
+            }
+            
+            // Passcode input
+            HStack {
+                Image(systemName: "key.fill")
+                    .foregroundColor(.gray)
+                
+                TextField(String(repeating: "0", count: selectedLength), text: $passcode)
+                    .keyboardType(.numberPad)
+                    .font(.title3)
+            }
+            .padding(16)
+            .background(subtleGray)
+            .cornerRadius(12)
+            .onChange(of: passcode) { _, val in
+                if val.count > selectedLength {
+                    passcode = String(val.prefix(selectedLength))
+                }
+            }
+            .onChange(of: selectedLength) { _, _ in
+                passcode = ""
+            }
+            
+            // Info text
+            Text(securityInfoText)
+                .font(.caption)
+                .foregroundColor(.secondary)
+        }
+        .padding(.horizontal)
+    }
+    
+    private func lengthButton(length: Int) -> some View {
+        let isSelected = selectedLength == length
+        let isFree = length == 3
+        let price = storeKit.displayPrice(for: length)
+        
+        return Button {
+            if isFree || isEditing {
+                selectedLength = length
+            } else {
+                upgradeTargetLength = length
+                showingUpgradeSheet = true
+            }
+        } label: {
+            VStack(spacing: 4) {
+                Text("\(length)桁")
+                    .font(.subheadline)
+                    .fontWeight(isSelected ? .bold : .regular)
+                
+                Text(isFree ? "無料" : price)
+                    .font(.caption2)
+                    .foregroundColor(isFree ? .green : .orange)
+            }
+            .frame(width: 60, height: 50)
+            .background(isSelected ? securityColor(for: length).opacity(0.2) : Color.white)
+            .cornerRadius(10)
+            .overlay(
+                RoundedRectangle(cornerRadius: 10)
+                    .stroke(isSelected ? securityColor(for: length) : Color.gray.opacity(0.2), lineWidth: isSelected ? 2 : 1)
+            )
+        }
+        .foregroundColor(.primary)
+    }
+    
+    private var securityInfoText: String {
+        let count = Int(pow(10.0, Double(selectedLength)))
+        if count >= 1_000_000_000 { return "🛡️ 100億通りの組み合わせ - 最高レベルのセキュリティ" }
+        if count >= 100_000_000 { return "🛡️ 1億通りの組み合わせ - 極めて強固" }
+        if count >= 10_000_000 { return "🛡️ 1,000万通りの組み合わせ - 非常に強固" }
+        if count >= 1_000_000 { return "🛡️ 100万通りの組み合わせ - 強固なセキュリティ" }
+        if count >= 100_000 { return "🔒 10万通りの組み合わせ - 高いセキュリティ" }
+        if count >= 10_000 { return "🔒 1万通りの組み合わせ - 標準的なセキュリティ" }
+        return "⚠️ 1,000通りの組み合わせ - 推測されやすい"
+    }
+    
+    private func securityColor(for length: Int) -> Color {
+        switch length {
+        case 3: return .orange
+        case 4: return .yellow
+        case 5: return .green
+        case 6: return .blue
+        case 7: return .purple
+        case 8...10: return .pink
+        default: return .gray
+        }
     }
     
     // MARK: - Voice Section
@@ -367,276 +370,276 @@ struct NewMessageView: View {
                 .font(.subheadline)
                 .fontWeight(.semibold)
             
-            if let _ = recordedFileURL {
-                // Recorded voice preview
-                voicePreviewCard(
-                    title: "録音済み",
-                    onPlay: { if let url = recordedFileURL { startPlayback(url: url) } },
-                    onDelete: deleteRecording
-                )
-            } else if isEditing && editingMessage?.voice_url != nil && !isExistingVoiceDeleted {
-                // Existing voice preview
-                if let url = URL(string: editingMessage!.voice_url!) {
-                    voicePreviewCard(
-                        title: "既存のボイス",
-                        onPlay: { startPlayback(url: url) },
-                        onDelete: { isExistingVoiceDeleted = true }
-                    )
+            if let _ = voiceData {
+                HStack {
+                    Image(systemName: "waveform")
+                        .foregroundColor(.green)
+                    Text("録音済み")
+                        .foregroundColor(.secondary)
+                    Spacer()
+                    Button("削除") {
+                        voiceData = nil
+                        shouldDeleteVoice = true
+                    }
+                    .foregroundColor(.red)
                 }
+                .padding(16)
+                .background(subtleGray)
+                .cornerRadius(12)
+            } else if let _ = editingMessage?.voice_url, !shouldDeleteVoice {
+                HStack {
+                    Image(systemName: "waveform")
+                        .foregroundColor(.blue)
+                    Text("ボイスメッセージあり")
+                        .foregroundColor(.secondary)
+                    Spacer()
+                    Button("削除") {
+                        shouldDeleteVoice = true
+                    }
+                    .foregroundColor(.red)
+                }
+                .padding(16)
+                .background(subtleGray)
+                .cornerRadius(12)
             } else {
-                // Record button
                 Button {
-                    isRecording ? stopRecording() : startRecording()
+                    toggleRecording()
                 } label: {
-                    HStack(spacing: 12) {
-                        ZStack {
-                            Circle()
-                                .fill(
-                                    isRecording
-                                    ? AnyShapeStyle(Color.red)
-                                    : AnyShapeStyle(instagramGradient)
-                                )
-                                .frame(width: 56, height: 56)
-                            
-                            Image(systemName: isRecording ? "stop.fill" : "mic.fill")
-                                .font(.title2)
-                                .foregroundColor(.white)
-                        }
+                    HStack {
+                        Image(systemName: isRecording ? "stop.circle.fill" : "mic.circle.fill")
+                            .font(.title)
+                            .foregroundColor(isRecording ? .red : .gray)
                         
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(isRecording ? "録音中..." : "タップして録音")
-                                .font(.subheadline)
-                                .fontWeight(.semibold)
-                                .foregroundColor(.primary)
-                            
-                            Text("ボイスメッセージを追加")
-                                .font(.caption)
-                                .foregroundColor(.secondary)
-                        }
+                        Text(isRecording ? "録音停止" : "タップして録音")
+                            .foregroundColor(.secondary)
                         
                         Spacer()
                     }
-                    .padding(12)
+                    .padding(16)
                     .background(subtleGray)
-                    .cornerRadius(16)
+                    .cornerRadius(12)
                 }
             }
         }
         .padding(.horizontal)
     }
     
-    // MARK: - Helper Views
-    private func deleteButton(action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            Image(systemName: "xmark.circle.fill")
-                .font(.title3)
-                .foregroundColor(.white)
-                .background(Circle().fill(Color.black.opacity(0.6)))
-        }
-        .padding(6)
-    }
-    
-    private func voicePreviewCard(title: String, onPlay: @escaping () -> Void, onDelete: @escaping () -> Void) -> some View {
-        HStack(spacing: 12) {
-            Button(action: {
-                if isPlayingPreview {
-                    stopPlayback()
-                } else {
-                    onPlay()
-                }
-            }) {
+    // MARK: - Upgrade Sheet
+    private var upgradeSheetView: some View {
+        NavigationStack {
+            VStack(spacing: 24) {
+                Spacer()
+                
                 ZStack {
                     Circle()
-                        .fill(instagramGradient)
-                        .frame(width: 48, height: 48)
+                        .fill(
+                            LinearGradient(
+                                colors: [securityColor(for: upgradeTargetLength), securityColor(for: upgradeTargetLength).opacity(0.7)],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
+                        )
+                        .frame(width: 100, height: 100)
                     
-                    Image(systemName: isPlayingPreview ? "pause.fill" : "play.fill")
+                    Image(systemName: "lock.shield.fill")
+                        .font(.system(size: 44))
                         .foregroundColor(.white)
                 }
-            }
-            
-            VStack(alignment: .leading, spacing: 2) {
-                Text(title)
-                    .font(.subheadline)
-                    .fontWeight(.semibold)
                 
-                Text(isPlayingPreview ? "再生中..." : "タップで再生")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-            }
-            
-            Spacer()
-            
-            Button(action: onDelete) {
-                Image(systemName: "trash")
-                    .foregroundColor(.red)
-                    .padding(10)
-                    .background(Color.red.opacity(0.1))
-                    .clipShape(Circle())
-            }
-        }
-        .padding(12)
-        .background(subtleGray)
-        .cornerRadius(16)
-    }
-
-    // MARK: - Logic
-    private func removeExistingImage(url: String) {
-        remainingImageUrls.removeAll { $0 == url }
-    }
-    
-    private func removeNewImage(at index: Int) {
-        newSelectedImages.remove(at: index)
-        if index < selectedPhotoItems.count {
-            selectedPhotoItems.remove(at: index)
-        }
-    }
-    
-    private func loadNewImages(from items: [PhotosPickerItem]) {
-        Task {
-            var images: [UIImage] = []
-            for item in items {
-                if let data = try? await item.loadTransferable(type: Data.self),
-                   let image = UIImage(data: data) {
-                    images.append(image)
+                VStack(spacing: 8) {
+                    Text("\(upgradeTargetLength)桁の暗証番号")
+                        .font(.title2)
+                        .fontWeight(.bold)
+                    
+                    Text(combinationText(for: upgradeTargetLength) + "の組み合わせ")
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+                }
+                
+                Text(storeKit.displayPrice(for: upgradeTargetLength))
+                    .font(.title)
+                    .fontWeight(.bold)
+                    .foregroundColor(.orange)
+                
+                VStack(alignment: .leading, spacing: 12) {
+                    benefitRow(icon: "shield.fill", text: "強固なセキュリティ")
+                    benefitRow(icon: "clock.fill", text: "長期間守りやすい")
+                    benefitRow(icon: "star.fill", text: "一度購入すれば何度でも使用可能")
+                }
+                .padding(20)
+                .background(subtleGray)
+                .cornerRadius(16)
+                
+                Spacer()
+                
+                Button {
+                    Task { await purchaseLength() }
+                } label: {
+                    Text("\(storeKit.displayPrice(for: upgradeTargetLength))で購入")
+                        .fontWeight(.bold)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 16)
+                        .background(
+                            LinearGradient(
+                                colors: [securityColor(for: upgradeTargetLength), securityColor(for: upgradeTargetLength).opacity(0.7)],
+                                startPoint: .leading,
+                                endPoint: .trailing
+                            )
+                        )
+                        .foregroundColor(.white)
+                        .cornerRadius(16)
                 }
             }
-            await MainActor.run {
-                newSelectedImages = images
+            .padding(24)
+            .navigationTitle("桁数を増やす")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Button("キャンセル") {
+                        showingUpgradeSheet = false
+                    }
+                }
             }
         }
     }
     
-    private func requestMicrophonePermission() {
-        AVAudioSession.sharedInstance().requestRecordPermission { _ in }
+    private func benefitRow(icon: String, text: String) -> some View {
+        HStack(spacing: 12) {
+            Image(systemName: icon)
+                .foregroundColor(securityColor(for: upgradeTargetLength))
+                .frame(width: 24)
+            Text(text)
+                .font(.subheadline)
+        }
+    }
+    
+    private func combinationText(for length: Int) -> String {
+        let count = Int(pow(10.0, Double(length)))
+        if count >= 1_000_000_000 { return "100億通り" }
+        if count >= 100_000_000 { return "1億通り" }
+        if count >= 10_000_000 { return "1,000万通り" }
+        if count >= 1_000_000 { return "100万通り" }
+        if count >= 100_000 { return "10万通り" }
+        if count >= 10_000 { return "1万通り" }
+        return "\(count)通り"
+    }
+    
+    // MARK: - Methods
+    
+    private func loadEditingMessage() {
+        guard let message = editingMessage else { return }
+        keyword = message.keyword
+        messageBody = message.body
+        selectedLength = message.passcode_length
+        passcode = message.passcode
+        existingImageUrls = message.image_urls ?? []
+    }
+    
+    private func loadImages(from items: [PhotosPickerItem]) async {
+        selectedImagesData = []
+        for item in items {
+            if let data = try? await item.loadTransferable(type: Data.self) {
+                selectedImagesData.append(data)
+            }
+        }
+    }
+    
+    private func toggleRecording() {
+        if isRecording {
+            stopRecording()
+        } else {
+            startRecording()
+        }
     }
     
     private func startRecording() {
-        if isEditing && editingMessage?.voice_url != nil {
-            isExistingVoiceDeleted = true
+        let session = AVAudioSession.sharedInstance()
+        do {
+            try session.setCategory(.playAndRecord, mode: .default)
+            try session.setActive(true)
+            
+            let url = FileManager.default.temporaryDirectory.appendingPathComponent("voice.m4a")
+            let settings: [String: Any] = [
+                AVFormatIDKey: Int(kAudioFormatMPEG4AAC),
+                AVSampleRateKey: 44100,
+                AVNumberOfChannelsKey: 1,
+                AVEncoderAudioQualityKey: AVAudioQuality.high.rawValue
+            ]
+            
+            audioRecorder = try AVAudioRecorder(url: url, settings: settings)
+            audioRecorder?.record()
+            isRecording = true
+        } catch {
+            print("Recording error: \(error)")
         }
-        
-        try? AVAudioSession.sharedInstance().setCategory(.playAndRecord, mode: .default)
-        try? AVAudioSession.sharedInstance().setActive(true)
-        
-        let url = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("temp.m4a")
-        
-        let settings: [String: Any] = [
-            AVFormatIDKey: Int(kAudioFormatMPEG4AAC),
-            AVSampleRateKey: 12000,
-            AVNumberOfChannelsKey: 1,
-            AVEncoderAudioQualityKey: AVAudioQuality.high.rawValue
-        ]
-        
-        audioRecorder = try? AVAudioRecorder(url: url, settings: settings)
-        audioRecorder?.record()
-        withAnimation { isRecording = true }
     }
     
     private func stopRecording() {
         audioRecorder?.stop()
-        withAnimation {
-            isRecording = false
-            recordedFileURL = audioRecorder?.url
-        }
-    }
-    
-    private func deleteRecording() {
-        recordedFileURL = nil
-    }
-    
-    private func startPlayback(url: URL) {
-        let item = AVPlayerItem(url: url)
-        if audioPlayer == nil {
-            audioPlayer = AVPlayer(playerItem: item)
-        } else {
-            audioPlayer?.replaceCurrentItem(with: item)
-        }
-        audioPlayer?.play()
-        isPlayingPreview = true
+        isRecording = false
         
-        NotificationCenter.default.addObserver(
-            forName: .AVPlayerItemDidPlayToEndTime,
-            object: audioPlayer?.currentItem,
-            queue: .main
-        ) { _ in
-            self.isPlayingPreview = false
-            self.audioPlayer?.seek(to: .zero)
-        }
-    }
-    
-    private func stopPlayback() {
-        audioPlayer?.pause()
-        isPlayingPreview = false
-    }
-
-    private var canSubmit: Bool {
-        let isKeywordValid = !keyword.trimmingCharacters(in: .whitespaces).isEmpty
-        let isPasscodeValid = !passcode.isEmpty
-        let hasBody = !bodyText.trimmingCharacters(in: .whitespaces).isEmpty
-        let hasVoice = recordedFileURL != nil || (isEditing && editingMessage?.voice_url != nil && !isExistingVoiceDeleted)
-        let hasImage = !newSelectedImages.isEmpty || !remainingImageUrls.isEmpty
-        return isKeywordValid && isPasscodeValid && (hasBody || hasVoice || hasImage)
-    }
-
-    private func submit() async {
-        errorMessage = nil
-        isLoading = true
-        defer { isLoading = false }
-        
-        let k = keyword.trimmingCharacters(in: .whitespaces)
-        let b = bodyText.trimmingCharacters(in: .whitespaces)
-        
-        var voiceData: Data? = nil
-        if let url = recordedFileURL, let data = try? Data(contentsOf: url) {
+        if let url = audioRecorder?.url,
+           let data = try? Data(contentsOf: url) {
             voiceData = data
+            shouldDeleteVoice = false
         }
-        
-        var imageData: [Data] = []
-        for img in newSelectedImages {
-            if let data = img.jpegData(compressionQuality: 0.8) {
-                imageData.append(data)
-            }
-        }
-
+    }
+    
+    private func purchaseLength() async {
         do {
-            let result: Message
-            if let editing = editingMessage {
-                result = try await service.updateMessage(
-                    message: editing,
-                    keyword: k,
-                    body: b,
-                    shouldDeleteVoice: isExistingVoiceDeleted,
-                    newVoiceData: voiceData,
-                    remainingImageUrls: remainingImageUrls,
-                    newImagesData: imageData,
-                    passcode: passcode,
-                    is4Digit: is4DigitMode
-                )
-            } else {
-                result = try await service.createMessage(
-                    keyword: k,
-                    body: b,
-                    voiceData: voiceData,
-                    imagesData: imageData,
-                    passcode: passcode,
-                    is4Digit: is4DigitMode
-                )
-            }
-            await MainActor.run {
-                onCompleted(result)
-                dismiss()
-            }
-        } catch MessageServiceError.keywordAlreadyExists {
-            await MainActor.run {
-                errorMessage = "この合言葉はすでに使用されています"
+            let purchased = try await storeKit.purchase(length: upgradeTargetLength)
+            if purchased {
+                await MainActor.run {
+                    selectedLength = upgradeTargetLength
+                    passcode = ""
+                    showingUpgradeSheet = false
+                }
             }
         } catch {
-            print("投稿エラー: \(error)")
-            await MainActor.run {
-                errorMessage = "投稿に失敗しました。時間をおいて再度お試しください。"
+            print("Purchase error: \(error)")
+        }
+    }
+    
+    private func save() async {
+        isLoading = true
+        errorMessage = nil
+        
+        defer { isLoading = false }
+        
+        do {
+            let message: Message
+            
+            if let editing = editingMessage {
+                message = try await service.updateMessage(
+                    message: editing,
+                    keyword: keyword,
+                    body: messageBody,
+                    shouldDeleteVoice: shouldDeleteVoice,
+                    newVoiceData: voiceData,
+                    remainingImageUrls: existingImageUrls,
+                    newImagesData: selectedImagesData,
+                    passcode: passcode,
+                    passcodeLength: selectedLength
+                )
+            } else {
+                message = try await service.createMessage(
+                    keyword: keyword,
+                    body: messageBody,
+                    voiceData: voiceData,
+                    imagesData: selectedImagesData.isEmpty ? nil : selectedImagesData,
+                    passcode: passcode,
+                    passcodeLength: selectedLength
+                )
             }
+            
+            onCompleted?(message)
+            dismiss()
+            
+        } catch MessageServiceError.keywordAlreadyExists {
+            errorMessage = "この合言葉は既に使用されています"
+        } catch {
+            errorMessage = "エラーが発生しました"
+            print("Save error: \(error)")
         }
     }
 }

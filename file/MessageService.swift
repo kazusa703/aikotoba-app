@@ -4,14 +4,18 @@ import Supabase
 // MARK: - Error Types
 enum MessageServiceError: Error {
     case notFound
-    case hidden  // ★追加: 非公開
+    case hidden
     case keywordAlreadyExists
     case notSignedIn
+    case notOwner
+    case cannotDowngrade
+    case invalidLength
+    case passcodeLengthMismatch
     case unknown(Error)
     case uploadFailed
 }
 
-// MARK: - Parameter Structs
+// MARK: - Parameter Structs (Sendable)
 
 struct InsertMessagePayload: Encodable, Sendable {
     let keyword: String
@@ -23,6 +27,7 @@ struct InsertMessagePayload: Encodable, Sendable {
     let creator_id: UUID?
     let passcode: String
     let is_4_digit: Bool
+    let passcode_length: Int
     let is_hidden: Bool
 }
 
@@ -33,6 +38,7 @@ struct UpdateMessagePayload: Encodable, Sendable {
     let image_urls: [String]?
     let passcode: String?
     let is_4_digit: Bool?
+    let passcode_length: Int?
     let is_hidden: Bool?
 }
 
@@ -40,9 +46,11 @@ struct InsertReportPayload: Encodable, Sendable {
     let message_id: UUID
 }
 
+
+
 // MARK: - Service Class
 
-final class MessageService {
+final class MessageService: @unchecked Sendable {
     
     private var supabase: SupabaseClient {
         SupabaseClientManager.shared.client
@@ -54,77 +62,42 @@ final class MessageService {
     
     private let projectUrlString = "https://mdlhncrhfluikvnixryi.supabase.co"
     
-    private let decoder: JSONDecoder = {
-        let decoder = JSONDecoder()
-        decoder.dateDecodingStrategy = .custom { decoder in
-            let container = try decoder.singleValueContainer()
-            let dateStr = try container.decode(String.self)
-            
-            let formatter = ISO8601DateFormatter()
-            formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-            if let date = formatter.date(from: dateStr) { return date }
-            
-            formatter.formatOptions = [.withInternetDateTime]
-            if let date = formatter.date(from: dateStr) { return date }
-            
-            throw DecodingError.dataCorruptedError(in: container, debugDescription: "Invalid date format: \(dateStr)")
-        }
-        return decoder
-    }()
+    // MARK: - Check Message Status
     
-    // MARK: - Fetch with Status Check
-    
-    /// ★新規: 非公開かどうかもチェックして検索
-    func fetchMessageWithStatus(by keyword: String) async throws -> Message {
-        // まず cleanup を実行（24時間経過した非公開投稿を自動公開）
-        try? await supabase.rpc("cleanup_expired_messages").execute()
+    func checkMessageStatus(keyword: String) async throws -> String {
+        try? await supabase.rpc("auto_publish_expired_hidden_messages").execute()
         
-        // ステータスをチェック
-        let statusResponse: String = try await supabase
+        let response: String = try await supabase
             .database
             .rpc("check_message_status", params: ["keyword_input": keyword])
             .execute()
             .value
         
-        switch statusResponse {
+        return response
+    }
+    
+    // MARK: - Fetch with Status
+    
+    func fetchMessageWithStatus(by keyword: String) async throws -> (message: Message?, status: String) {
+        let status = try await checkMessageStatus(keyword: keyword)
+        
+        switch status {
         case "not_found":
-            throw MessageServiceError.notFound
+            return (nil, "not_found")
         case "hidden":
-            throw MessageServiceError.hidden
+            return (nil, "hidden")
         default:
-            // 公開中なら通常通り取得
-            return try await fetchMessageDirect(by: keyword)
+            let message = try await fetchMessage(by: keyword)
+            return (message, "available")
         }
     }
     
-    /// 直接取得（ステータスチェック済みの場合用）
-    private func fetchMessageDirect(by keyword: String) async throws -> Message {
-        do {
-            let response = try await supabase
-                .from("messages")
-                .select()
-                .eq("keyword", value: keyword)
-                .eq("is_hidden", value: false)
-                .limit(1)
-                .single()
-                .execute()
-            
-            return try decoder.decode(Message.self, from: response.data)
-            
-        } catch let error as PostgrestError {
-            if error.code == "PGRST116" || error.message.lowercased().contains("not found") {
-                throw MessageServiceError.notFound
-            }
-            print("Supabase Error: \(error)")
-            throw MessageServiceError.unknown(error)
-        } catch {
-            throw MessageServiceError.unknown(error)
-        }
-    }
+    // MARK: - Fetch
     
-    /// 従来のfetchMessage（互換性のため残す）
     func fetchMessage(by keyword: String) async throws -> Message {
-        try? await supabase.rpc("cleanup_expired_messages").execute()
+        try? await supabase.rpc("auto_publish_expired_hidden_messages").execute()
+        
+        let decoder = makeDecoder()
         
         do {
             let response = try await supabase
@@ -149,7 +122,7 @@ final class MessageService {
         }
     }
     
-    // MARK: - Steal (奪う / ロック解除)
+    // MARK: - Steal
     
     func attemptSteal(messageId: UUID, guess: String) async throws -> String {
         let params: [String: String] = [
@@ -170,6 +143,26 @@ final class MessageService {
             print("Steal error: \(error)")
             throw error
         }
+    }
+    
+    // MARK: - Upgrade Passcode Length
+    
+    func upgradePasscodeLength(messageId: UUID, newLength: Int, newPasscode: String) async throws -> String {
+        // 辞書で直接渡す（Sendable問題を回避）
+        let response: String = try await supabase
+            .database
+            .rpc(
+                "upgrade_passcode_length",
+                params: [
+                    "target_message_id": messageId.uuidString,
+                    "new_length": "\(newLength)",
+                    "new_passcode": newPasscode
+                ]
+            )
+            .execute()
+            .value
+        
+        return response
     }
     
     // MARK: - Increment View Count
@@ -196,7 +189,7 @@ final class MessageService {
         voiceData: Data?,
         imagesData: [Data]?,
         passcode: String,
-        is4Digit: Bool
+        passcodeLength: Int
     ) async throws -> Message {
         
         var voiceUrl: String? = nil
@@ -235,9 +228,12 @@ final class MessageService {
             image_urls: imageUrls,
             creator_id: userId,
             passcode: passcode,
-            is_4_digit: is4Digit,
+            is_4_digit: passcodeLength >= 4,
+            passcode_length: passcodeLength,
             is_hidden: false
         )
+        
+        let decoder = makeDecoder()
         
         do {
             let response = try await supabase
@@ -270,7 +266,7 @@ final class MessageService {
         remainingImageUrls: [String],
         newImagesData: [Data],
         passcode: String?,
-        is4Digit: Bool?
+        passcodeLength: Int?
     ) async throws -> Message {
         
         var finalVoiceUrl: String? = message.voice_url
@@ -316,9 +312,12 @@ final class MessageService {
             voice_url: finalVoiceUrl,
             image_urls: finalImageUrls.isEmpty ? nil : finalImageUrls,
             passcode: passcode,
-            is_4_digit: is4Digit,
+            is_4_digit: passcodeLength != nil ? (passcodeLength! >= 4) : nil,
+            passcode_length: passcodeLength,
             is_hidden: false
         )
+        
+        let decoder = makeDecoder()
         
         do {
             let response = try await supabase
@@ -343,27 +342,25 @@ final class MessageService {
         }
     }
     
-    // MARK: - Upgrade to 4 Digit
-    
-    /// ★新規: 4桁モードにアップグレード
-    func upgradeTo4Digit(message: Message) async throws -> Message {
-        do {
-            let response = try await supabase
-                .from("messages")
-                .update(["is_4_digit": true])
-                .eq("id", value: message.id)
-                .select()
-                .single()
-                .execute()
-            
-            return try decoder.decode(Message.self, from: response.data)
-        } catch {
-            print("Upgrade failed: \(error)")
-            throw MessageServiceError.unknown(error)
-        }
-    }
-    
     // MARK: - Helper Methods
+    
+    private func makeDecoder() -> JSONDecoder {
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .custom { decoder in
+            let container = try decoder.singleValueContainer()
+            let dateStr = try container.decode(String.self)
+            
+            let formatter = ISO8601DateFormatter()
+            formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+            if let date = formatter.date(from: dateStr) { return date }
+            
+            formatter.formatOptions = [.withInternetDateTime]
+            if let date = formatter.date(from: dateStr) { return date }
+            
+            throw DecodingError.dataCorruptedError(in: container, debugDescription: "Invalid date format: \(dateStr)")
+        }
+        return decoder
+    }
     
     private func uploadFile(
         data: Data,
@@ -427,6 +424,8 @@ final class MessageService {
             throw MessageServiceError.notSignedIn
         }
         
+        let decoder = makeDecoder()
+        
         do {
             let response = try await supabase
                 .from("messages")
@@ -446,6 +445,8 @@ final class MessageService {
 
     func fetchNotifications() async throws -> [AppNotification] {
         guard let userId = supabase.auth.currentUser?.id else { return [] }
+        
+        let decoder = makeDecoder()
         
         let response = try await supabase
             .from("notifications")

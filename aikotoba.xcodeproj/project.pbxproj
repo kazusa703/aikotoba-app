@@ -19,6 +19,7 @@
 		AC739A532EE54CDD00FFD594 /* UnlockView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC739A522EE54CDD00FFD594 /* UnlockView.swift */; };
 		AC739A552EE54CF500FFD594 /* StealSuccessView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC739A542EE54CF500FFD594 /* StealSuccessView.swift */; };
 		AC739A572EE5528D00FFD594 /* PreviewMessageView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC739A562EE5528D00FFD594 /* PreviewMessageView.swift */; };
+		ACD312D22F01DAC500E076C4 /* Products.storekit in Resources */ = {isa = PBXBuildFile; fileRef = ACD312D12F01DAC500E076C4 /* Products.storekit */; };
 		ACE941722EE9567600FD58B5 /* NotificationsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = ACE941712EE9567600FD58B5 /* NotificationsView.swift */; };
 /* End PBXBuildFile section */
 
@@ -33,6 +34,7 @@
 		AC739A522EE54CDD00FFD594 /* UnlockView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UnlockView.swift; sourceTree = "<group>"; };
 		AC739A542EE54CF500FFD594 /* StealSuccessView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StealSuccessView.swift; sourceTree = "<group>"; };
 		AC739A562EE5528D00FFD594 /* PreviewMessageView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PreviewMessageView.swift; sourceTree = "<group>"; };
+		ACD312D12F01DAC500E076C4 /* Products.storekit */ = {isa = PBXFileReference; lastKnownFileType = text; path = Products.storekit; sourceTree = "<group>"; };
 		ACE941712EE9567600FD58B5 /* NotificationsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationsView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -61,6 +63,7 @@
 		AC2713152EE12880007C9A64 = {
 			isa = PBXGroup;
 			children = (
+				ACD312D12F01DAC500E076C4 /* Products.storekit */,
 				AC2713382EE12B56007C9A64 /* UI */,
 				AC2713202EE12880007C9A64 /* file */,
 				AC2713492EE19C7D007C9A64 /* Frameworks */,
@@ -170,6 +173,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				ACD312D22F01DAC500E076C4 /* Products.storekit in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

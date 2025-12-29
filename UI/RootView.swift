@@ -4,27 +4,25 @@ import Supabase
 struct RootView: View {
     @EnvironmentObject var sessionStore: SessionStore
     
-    // MARK: - Search State
+    // Search State
     @State private var keyword: String = ""
     @State private var isLoading = false
     @State private var errorMessage: String?
-    @State private var isHiddenMessage = false  // ★追加: 非公開フラグ
     
-    // MARK: - Navigation State
+    // Navigation State
     @State private var foundMessage: Message?
     @State private var navigateToFoundMessage = false
     @State private var showingPreviewSheet = false
     
-    // 新規作成時用
     @State private var justCreatedMessage: Message?
     @State private var navigateToCreatedMessage = false
     
-    // 通知シート
-    @State private var showingNotifications = false
+    // 新規投稿
+    @State private var showingNewMessageSheet = false
 
     private let service = MessageService()
     
-    // MARK: - Instagram Colors
+    // Instagram Colors
     private let instagramGradient = LinearGradient(
         colors: [
             Color(red: 131/255, green: 58/255, blue: 180/255),
@@ -35,38 +33,74 @@ struct RootView: View {
         endPoint: .bottomTrailing
     )
     
+    private let disabledGradient = LinearGradient(
+        colors: [Color.gray.opacity(0.3), Color.gray.opacity(0.3)],
+        startPoint: .topLeading,
+        endPoint: .bottomTrailing
+    )
+    
     private let subtleGray = Color(red: 250/255, green: 250/255, blue: 250/255)
 
     var body: some View {
         NavigationStack {
-            ZStack {
-                Color.white.ignoresSafeArea()
-                
-                VStack(spacing: 0) {
-                    // MARK: - Custom Header
-                    headerView
-                    
-                    Divider()
-                    
+            ScrollView {
+                VStack(spacing: 24) {
                     // MARK: - Search Section
                     searchSection
-                        .padding(.horizontal, 16)
-                        .padding(.top, 20)
                     
-                    // MARK: - Main Content
-                    ScrollView {
-                        VStack(spacing: 24) {
-                            heroSection
-                                .padding(.top, 20)
-                            
-                            howItWorksSection
-                            
-                            Spacer(minLength: 100)
+                    // MARK: - Hero Section
+                    heroSection
+                    
+                    // MARK: - How It Works
+                    howItWorksSection
+                }
+                .padding(.horizontal, 16)
+                .padding(.bottom, 40)
+            }
+            .background(Color.white)
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    HStack(spacing: 20) {
+                        // 新規投稿
+                        Button {
+                            showingNewMessageSheet = true
+                        } label: {
+                            Image(systemName: "plus.app")
+                                .font(.system(size: 22))
+                                .foregroundColor(.primary)
+                        }
+                        
+                        // お知らせ
+                        NavigationLink {
+                            NotificationsView()
+                        } label: {
+                            Image(systemName: "bell")
+                                .font(.system(size: 20))
+                                .foregroundColor(.primary)
+                        }
+                        
+                        // マイページ
+                        NavigationLink {
+                            MyMessagesView()
+                        } label: {
+                            Image(systemName: "person.circle")
+                                .font(.system(size: 22))
+                                .foregroundColor(.primary)
+                        }
+                        
+                        // 設定・メニュー
+                        NavigationLink {
+                            SettingsView()
+                        } label: {
+                            Image(systemName: "line.3.horizontal")
+                                .font(.system(size: 20))
+                                .foregroundColor(.primary)
                         }
                     }
                 }
             }
-            // MARK: - Navigation Destinations
+            // Navigation Destinations
             .navigationDestination(isPresented: $navigateToFoundMessage) {
                 if let message = foundMessage {
                     MessageDetailView(message: message, service: service, allowDelete: false)
@@ -77,7 +111,7 @@ struct RootView: View {
                     MessageDetailView(message: message, service: service, allowDelete: true)
                 }
             }
-            // MARK: - Preview Sheet
+            // Preview Sheet
             .sheet(isPresented: $showingPreviewSheet) {
                 if let message = foundMessage {
                     PreviewMessageView(
@@ -86,28 +120,12 @@ struct RootView: View {
                         rootKeyword: $keyword,
                         isPresented: $showingPreviewSheet
                     )
-                    .presentationDetents([.large])
-                    .presentationDragIndicator(.visible)
+                    .presentationDetents([.medium, .large])
                 }
             }
-            .sheet(isPresented: $showingNotifications) {
-                NotificationsView()
-            }
-            .navigationBarHidden(true)
-        }
-    }
-    
-    // MARK: - Header View
-    private var headerView: some View {
-        HStack {
-            Text("aikotoba")
-                .font(.system(size: 28, weight: .bold, design: .serif))
-                .italic()
-            
-            Spacer()
-            
-            HStack(spacing: 20) {
-                NavigationLink {
+            // New Message Sheet
+            .sheet(isPresented: $showingNewMessageSheet) {
+                NavigationStack {
                     NewMessageView(service: service) { created in
                         justCreatedMessage = created
                         Task {
@@ -115,46 +133,14 @@ struct RootView: View {
                             navigateToCreatedMessage = true
                         }
                     }
-                } label: {
-                    Image(systemName: "plus.app")
-                        .font(.system(size: 24))
-                        .foregroundColor(.black)
-                }
-                
-                Button {
-                    showingNotifications = true
-                } label: {
-                    Image(systemName: "heart")
-                        .font(.system(size: 24))
-                        .foregroundColor(.black)
-                }
-                
-                NavigationLink {
-                    MyMessagesView()
-                } label: {
-                    Image(systemName: "person.circle")
-                        .font(.system(size: 24))
-                        .foregroundColor(.black)
-                }
-                
-                NavigationLink {
-                    SettingsView()
-                } label: {
-                    Image(systemName: "line.3.horizontal")
-                        .font(.system(size: 20))
-                        .foregroundColor(.black)
                 }
             }
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 12)
-        .background(Color.white)
     }
     
     // MARK: - Search Section
     private var searchSection: some View {
         VStack(spacing: 12) {
-            // Search Bar
             HStack {
                 Image(systemName: "magnifyingglass")
                     .foregroundColor(.gray)
@@ -162,17 +148,10 @@ struct RootView: View {
                 TextField("合言葉を入力", text: $keyword)
                     .textInputAutocapitalization(.never)
                     .disableAutocorrection(true)
-                    .onChange(of: keyword) { _, _ in
-                        // 入力が変わったらエラーをクリア
-                        errorMessage = nil
-                        isHiddenMessage = false
-                    }
                 
                 if !keyword.isEmpty {
                     Button {
                         keyword = ""
-                        errorMessage = nil
-                        isHiddenMessage = false
                     } label: {
                         Image(systemName: "xmark.circle.fill")
                             .foregroundColor(.gray)
@@ -183,7 +162,6 @@ struct RootView: View {
             .background(subtleGray)
             .cornerRadius(12)
             
-            // Search Button
             Button {
                 Task { await search() }
             } label: {
@@ -192,6 +170,7 @@ struct RootView: View {
                         ProgressView()
                             .tint(.white)
                     } else {
+                        Image(systemName: "magnifyingglass")
                         Text("検索")
                             .fontWeight(.semibold)
                     }
@@ -200,27 +179,24 @@ struct RootView: View {
                 .padding(.vertical, 14)
                 .background(
                     keyword.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-                        ? AnyShapeStyle(Color.gray.opacity(0.3))
-                        : AnyShapeStyle(instagramGradient)
-                    )
-                    .foregroundColor(.white)
-                    .cornerRadius(12)
-                    }
+                    ? disabledGradient
+                    : instagramGradient
+                )
+                .foregroundColor(.white)
+                .cornerRadius(12)
+            }
             .disabled(keyword.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isLoading)
             
-            // Error Message
             if let errorMessage {
-                HStack(spacing: 6) {
-                    Image(systemName: isHiddenMessage ? "eye.slash.fill" : "exclamationmark.circle.fill")
-                        .foregroundColor(isHiddenMessage ? .orange : .red)
-                    
+                HStack {
+                    Image(systemName: "exclamationmark.circle")
                     Text(errorMessage)
-                        .foregroundColor(isHiddenMessage ? .orange : .red)
                 }
                 .font(.caption)
-                .padding(.top, 4)
+                .foregroundColor(.red)
             }
         }
+        .padding(.top, 8)
     }
     
     // MARK: - Hero Section
@@ -231,23 +207,20 @@ struct RootView: View {
                     .stroke(instagramGradient, lineWidth: 3)
                     .frame(width: 100, height: 100)
                 
-                Image(systemName: "lock.shield")
+                Image(systemName: "lock.fill")
                     .font(.system(size: 40))
                     .foregroundStyle(instagramGradient)
             }
             
-            VStack(spacing: 8) {
-                Text("秘密の合言葉")
-                    .font(.title2)
-                    .fontWeight(.bold)
-                
-                Text("合言葉を知っている人だけが\nメッセージを見られる")
-                    .font(.subheadline)
-                    .foregroundColor(.secondary)
-                    .multilineTextAlignment(.center)
-            }
+            Text("秘密の合言葉で繋がる")
+                .font(.headline)
+            
+            Text("合言葉を知っている人だけがアクセスできる\nメッセージを作成・共有しよう")
+                .font(.subheadline)
+                .foregroundColor(.secondary)
+                .multilineTextAlignment(.center)
         }
-        .padding(.horizontal, 40)
+        .padding(.vertical, 24)
     }
     
     // MARK: - How It Works Section
@@ -255,61 +228,57 @@ struct RootView: View {
         VStack(alignment: .leading, spacing: 16) {
             Text("使い方")
                 .font(.headline)
-                .padding(.horizontal, 16)
             
             ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 12) {
-                    featureCard(
-                        icon: "pencil.circle.fill",
-                        title: "作成",
-                        description: "合言葉を設定して\nメッセージを投稿",
+                HStack(spacing: 16) {
+                    howToCard(
+                        icon: "plus.circle.fill",
+                        title: "作成する",
+                        description: "合言葉と暗証番号を設定して投稿",
+                        color: .green
+                    )
+                    
+                    howToCard(
+                        icon: "magnifyingglass.circle.fill",
+                        title: "検索する",
+                        description: "合言葉で投稿を探す",
+                        color: .blue
+                    )
+                    
+                    howToCard(
+                        icon: "lock.open.fill",
+                        title: "奪う",
+                        description: "暗証番号を当てて奪取",
                         color: .purple
                     )
-                    
-                    featureCard(
-                        icon: "magnifyingglass.circle.fill",
-                        title: "検索",
-                        description: "合言葉を入力して\nメッセージを探す",
-                        color: .pink
-                    )
-                    
-                    featureCard(
-                        icon: "lock.circle.fill",
-                        title: "奪取",
-                        description: "暗証番号を当てて\n投稿を奪う",
-                        color: .orange
-                    )
                 }
-                .padding(.horizontal, 16)
             }
         }
     }
     
-    private func featureCard(icon: String, title: String, description: String, color: Color) -> some View {
+    private func howToCard(icon: String, title: String, description: String, color: Color) -> some View {
         VStack(alignment: .leading, spacing: 12) {
             Image(systemName: icon)
-                .font(.system(size: 32))
+                .font(.title)
                 .foregroundColor(color)
             
             Text(title)
-                .font(.headline)
-                .foregroundColor(.primary)
+                .font(.subheadline)
+                .fontWeight(.semibold)
             
             Text(description)
                 .font(.caption)
                 .foregroundColor(.secondary)
-                .lineLimit(2)
         }
-        .frame(width: 140, alignment: .leading)
+        .frame(width: 140)
         .padding(16)
         .background(subtleGray)
         .cornerRadius(16)
     }
-
+    
     // MARK: - Search Function
     private func search() async {
         errorMessage = nil
-        isHiddenMessage = false
         isLoading = true
         foundMessage = nil
         
@@ -319,32 +288,29 @@ struct RootView: View {
         guard !trimmed.isEmpty else { return }
 
         do {
-            // ★新しいメソッドを使用（非公開チェック込み）
-            let message = try await service.fetchMessageWithStatus(by: trimmed)
+            let (message, status) = try await service.fetchMessageWithStatus(by: trimmed)
             
             await MainActor.run {
-                if service.isOwner(of: message) {
-                    foundMessage = message
-                    navigateToFoundMessage = true
-                } else {
-                    Task {
-                        await service.incrementViewCount(for: message.id)
+                switch status {
+                case "hidden":
+                    errorMessage = "この合言葉は現在非公開です"
+                case "not_found":
+                    errorMessage = "この合言葉は見つかりませんでした"
+                default:
+                    if var message = message {
+                        if service.isOwner(of: message) {
+                            foundMessage = message
+                            navigateToFoundMessage = true
+                        } else {
+                            Task {
+                                await service.incrementViewCount(for: message.id)
+                            }
+                            message.view_count += 1
+                            foundMessage = message
+                            showingPreviewSheet = true
+                        }
                     }
-                    var updatedMessage = message
-                    updatedMessage.view_count += 1
-                    foundMessage = updatedMessage
-                    showingPreviewSheet = true
                 }
-            }
-        } catch MessageServiceError.hidden {
-            // ★非公開の場合
-            await MainActor.run {
-                isHiddenMessage = true
-                errorMessage = "この合言葉は現在非公開です"
-            }
-        } catch MessageServiceError.notFound {
-            await MainActor.run {
-                errorMessage = "この合言葉は見つかりませんでした"
             }
         } catch {
             print("検索エラー詳細: \(error)")

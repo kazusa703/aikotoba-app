@@ -8,21 +8,17 @@ struct MessageDetailView: View {
     let service: MessageService
     let allowDelete: Bool
 
-    // Action States
     @State private var isReporting = false
     @State private var isDeleting = false
     @State private var infoMessage: String?
     
-    // Alert States
     @State private var showingDeleteAlert = false
     @State private var showingCopyAlert = false
     @State private var isPresentingEditSheet = false
     
-    // Audio States
     @State private var audioPlayer: AVPlayer?
     @State private var isPlaying = false
     
-    // Unlock State
     @State private var showingUnlockView = false
     @State private var currentImageIndex = 0
     
@@ -57,6 +53,18 @@ struct MessageDetailView: View {
     private var isOwner: Bool {
         service.isOwner(of: displayingMessage)
     }
+    
+    private func securityColor(for length: Int) -> Color {
+        switch length {
+        case 3: return .orange
+        case 4: return .yellow
+        case 5: return .green
+        case 6: return .blue
+        case 7: return .purple
+        case 8...10: return .pink
+        default: return .gray
+        }
+    }
 
     init(message: Message, service: MessageService, allowDelete: Bool) {
         _displayingMessage = State(initialValue: message)
@@ -66,47 +74,38 @@ struct MessageDetailView: View {
 
     var body: some View {
         ZStack {
-            // Main content
             ScrollView {
                 VStack(spacing: 0) {
-                    // MARK: - Header
                     if isOwner {
                         ownerHeaderSection
                     } else {
                         visitorHeaderSection
                     }
                     
-                    // MARK: - Stats Dashboard (Owner Only - Large)
                     if isOwner {
                         statsDashboard
                     }
                     
-                    // MARK: - Image Carousel
                     if let urls = displayingMessage.image_urls, !urls.isEmpty {
                         imageCarousel(urls: urls)
                     }
                     
-                    // MARK: - Stats Bar (Visitor Only - with tooltips)
                     if !isOwner {
                         visitorStatsBar
                     }
                     
-                    // MARK: - Hidden Warning (Owner Only)
                     if isOwner && displayingMessage.is_hidden {
                         warningBanner
                     }
                     
-                    // MARK: - Body
                     if !displayingMessage.body.isEmpty {
                         bodySection
                     }
                     
-                    // MARK: - Voice
                     if let voiceUrl = displayingMessage.voice_url, let url = URL(string: voiceUrl) {
                         voiceSection(url: url)
                     }
                     
-                    // MARK: - Info Message
                     if let infoMessage {
                         Text(infoMessage)
                             .font(.caption)
@@ -114,21 +113,14 @@ struct MessageDetailView: View {
                             .padding()
                     }
                     
-                    // MARK: - Owner Bottom Actions
                     if isOwner {
                         ownerBottomActions
                     }
                     
-                    // Spacer for visitor (steal button at bottom)
-                    if !isOwner {
-                        Spacer(minLength: 100)
-                    } else {
-                        Spacer(minLength: 50)
-                    }
+                    Spacer(minLength: isOwner ? 50 : 100)
                 }
             }
             
-            // MARK: - Steal Button Fixed at Bottom (Visitor Only)
             if !isOwner {
                 VStack {
                     Spacer()
@@ -136,7 +128,6 @@ struct MessageDetailView: View {
                 }
             }
             
-            // MARK: - Tooltip Overlay
             if !isOwner {
                 tooltipOverlay
             }
@@ -145,11 +136,7 @@ struct MessageDetailView: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .navigationBarTrailing) {
-                if isOwner {
-                    ownerMenu
-                } else {
-                    visitorMenu
-                }
+                if isOwner { ownerMenu } else { visitorMenu }
             }
         }
         .onDisappear { audioPlayer?.pause() }
@@ -309,20 +296,19 @@ struct MessageDetailView: View {
                 statCard(icon: "shield.fill", value: displayingMessage.failed_count, label: "防衛成功", color: .green)
             }
             
+            // Security status
             HStack {
-                Image(systemName: "lock.fill")
-                    .foregroundColor(displayingMessage.is_4_digit ? .green : .orange)
+                Image(systemName: securityIcon(for: displayingMessage.passcode_length))
+                    .foregroundColor(securityColor(for: displayingMessage.passcode_length))
                 
-                Text(displayingMessage.is_4_digit ? "4桁モード（高セキュリティ）" : "3桁モード")
+                Text("\(displayingMessage.passcode_length)桁モード")
                     .font(.subheadline)
                 
-                Spacer()
+                Text("(\(combinationText(for: displayingMessage.passcode_length)))")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
                 
-                if !displayingMessage.is_4_digit {
-                    Text("4桁にアップグレード可能")
-                        .font(.caption)
-                        .foregroundColor(.orange)
-                }
+                Spacer()
             }
             .padding(12)
             .background(Color.white)
@@ -356,6 +342,27 @@ struct MessageDetailView: View {
         .shadow(color: color.opacity(0.1), radius: 5, x: 0, y: 2)
     }
     
+    private func securityIcon(for length: Int) -> String {
+        switch length {
+        case 3: return "lock.fill"
+        case 4...5: return "lock.shield.fill"
+        case 6...7: return "shield.fill"
+        case 8...10: return "shield.checkered"
+        default: return "lock.fill"
+        }
+    }
+    
+    private func combinationText(for length: Int) -> String {
+        let count = Int(pow(10.0, Double(length)))
+        if count >= 1_000_000_000 { return "100億通り" }
+        if count >= 100_000_000 { return "1億通り" }
+        if count >= 10_000_000 { return "1,000万通り" }
+        if count >= 1_000_000 { return "100万通り" }
+        if count >= 100_000 { return "10万通り" }
+        if count >= 10_000 { return "1万通り" }
+        return "\(count)通り"
+    }
+    
     // MARK: - Visitor Header Section
     private var visitorHeaderSection: some View {
         HStack(spacing: 12) {
@@ -385,26 +392,25 @@ struct MessageDetailView: View {
             Spacer()
             
             HStack(spacing: 4) {
-                Image(systemName: "lock.fill")
-                Text(displayingMessage.is_4_digit ? "4桁" : "3桁")
+                Image(systemName: securityIcon(for: displayingMessage.passcode_length))
+                Text("\(displayingMessage.passcode_length)桁")
             }
             .font(.caption)
-            .foregroundColor(displayingMessage.is_4_digit ? .green : .orange)
+            .foregroundColor(securityColor(for: displayingMessage.passcode_length))
             .padding(.horizontal, 10)
             .padding(.vertical, 6)
             .background(
                 Capsule()
-                    .fill((displayingMessage.is_4_digit ? Color.green : Color.orange).opacity(0.1))
+                    .fill(securityColor(for: displayingMessage.passcode_length).opacity(0.1))
             )
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 12)
     }
     
-    // MARK: - Visitor Stats Bar with Tooltips
+    // MARK: - Visitor Stats Bar
     private var visitorStatsBar: some View {
         HStack(spacing: 20) {
-            // Views
             statIconWithTooltip(
                 systemName: "eye.fill",
                 value: displayingMessage.view_count,
@@ -413,7 +419,6 @@ struct MessageDetailView: View {
                 tooltipText: "閲覧数"
             )
             
-            // Challenge attempts (spear)
             statIconWithTooltip(
                 systemName: "arrowtriangle.up.fill",
                 value: displayingMessage.failed_count,
@@ -422,7 +427,6 @@ struct MessageDetailView: View {
                 tooltipText: "挑戦した人の数"
             )
             
-            // Defense (shield)
             statIconWithTooltip(
                 systemName: "shield.fill",
                 value: displayingMessage.failed_count,
@@ -431,7 +435,6 @@ struct MessageDetailView: View {
                 tooltipText: "防衛成功回数"
             )
             
-            // Stolen count (lock open)
             statIconWithTooltip(
                 systemName: "lock.open.fill",
                 value: displayingMessage.stolen_count,
@@ -544,7 +547,7 @@ struct MessageDetailView: View {
                     .font(.subheadline)
                     .fontWeight(.semibold)
                 
-                Text("24時間以内に編集して再公開しないと削除されます")
+                Text("24時間以内に編集して再公開しないと自動公開されます")
                     .font(.caption)
                     .foregroundColor(.secondary)
             }
@@ -686,7 +689,7 @@ struct MessageDetailView: View {
         .padding(.top, 20)
     }
     
-    // MARK: - Steal Button Fixed at Bottom
+    // MARK: - Steal Button Fixed
     private var stealButtonFixed: some View {
         Button {
             showingUnlockView = true

@@ -33,43 +33,47 @@ struct PreviewMessageView: View {
         startPoint: .topLeading,
         endPoint: .bottomTrailing
     )
+    
+    private func securityColor(for length: Int) -> Color {
+        switch length {
+        case 3: return .orange
+        case 4: return .yellow
+        case 5: return .green
+        case 6: return .blue
+        case 7: return .purple
+        case 8...10: return .pink
+        default: return .gray
+        }
+    }
 
     var body: some View {
         NavigationStack {
             ZStack {
-                // Main content
                 ScrollView {
                     VStack(spacing: 0) {
-                        // MARK: - Header (User Info Style)
                         headerSection
                         
-                        // MARK: - Image Carousel
                         if let urls = message.image_urls, !urls.isEmpty {
                             imageCarousel(urls: urls)
                         }
                         
-                        // MARK: - Stats Bar with Tooltips
                         statsBar
                         
-                        // MARK: - Body Text
                         if !message.body.isEmpty {
                             bodySection
                         }
                         
-                        // MARK: - Voice Message
                         if let voiceUrl = message.voice_url, let url = URL(string: voiceUrl) {
                             voiceSection(url: url)
                         }
                         
-                        // MARK: - Report
                         reportButton
                         
-                        // Spacer to push steal button to bottom
                         Spacer(minLength: 100)
                     }
                 }
                 
-                // MARK: - Steal Button (Fixed at bottom)
+                // Steal Button Fixed at bottom
                 VStack {
                     Spacer()
                     stealButton
@@ -86,7 +90,6 @@ struct PreviewMessageView: View {
                         , alignment: .bottom)
                 }
                 
-                // MARK: - Tooltip Overlays
                 tooltipOverlay
             }
             .background(Color.white)
@@ -123,7 +126,6 @@ struct PreviewMessageView: View {
     // MARK: - Header Section
     private var headerSection: some View {
         HStack(spacing: 12) {
-            // Avatar with gradient border
             ZStack {
                 Circle()
                     .stroke(instagramGradient, lineWidth: 2)
@@ -149,24 +151,34 @@ struct PreviewMessageView: View {
             
             Spacer()
             
-            // Lock indicator
+            // Lock indicator with digit count
             HStack(spacing: 4) {
-                Image(systemName: "lock.fill")
+                Image(systemName: securityIcon)
                     .font(.caption)
-                Text(message.is_4_digit ? "4桁" : "3桁")
+                Text("\(message.passcode_length)桁")
                     .font(.caption)
                     .fontWeight(.medium)
             }
-            .foregroundColor(message.is_4_digit ? .green : .orange)
+            .foregroundColor(securityColor(for: message.passcode_length))
             .padding(.horizontal, 10)
             .padding(.vertical, 6)
             .background(
                 Capsule()
-                    .fill(message.is_4_digit ? Color.green.opacity(0.1) : Color.orange.opacity(0.1))
+                    .fill(securityColor(for: message.passcode_length).opacity(0.1))
             )
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 12)
+    }
+    
+    private var securityIcon: String {
+        switch message.passcode_length {
+        case 3: return "lock.fill"
+        case 4...5: return "lock.shield.fill"
+        case 6...7: return "shield.fill"
+        case 8...10: return "shield.checkered"
+        default: return "lock.fill"
+        }
     }
     
     // MARK: - Image Carousel
@@ -192,10 +204,9 @@ struct PreviewMessageView: View {
         .frame(height: 400)
     }
     
-    // MARK: - Stats Bar with Long Press Tooltips
+    // MARK: - Stats Bar
     private var statsBar: some View {
         HStack(spacing: 20) {
-            // Views (eye icon)
             statIcon(
                 systemName: "eye.fill",
                 value: message.view_count,
@@ -204,7 +215,6 @@ struct PreviewMessageView: View {
                 tooltipText: "閲覧数"
             )
             
-            // Challenge attempts (spear/arrow icon)
             statIcon(
                 systemName: "arrowtriangle.up.fill",
                 value: message.failed_count,
@@ -213,7 +223,6 @@ struct PreviewMessageView: View {
                 tooltipText: "挑戦した人の数"
             )
             
-            // Defense (shield icon)
             statIcon(
                 systemName: "shield.fill",
                 value: message.failed_count,
@@ -222,7 +231,6 @@ struct PreviewMessageView: View {
                 tooltipText: "防衛成功回数"
             )
             
-            // Stolen count (lock open icon)
             statIcon(
                 systemName: "lock.open.fill",
                 value: message.stolen_count,
@@ -251,11 +259,8 @@ struct PreviewMessageView: View {
         }
         .foregroundColor(color)
         .onLongPressGesture(minimumDuration: 0.3) {
-            // Hide all other tooltips
             hideAllTooltips()
             isShowingTooltip.wrappedValue = true
-            
-            // Auto-hide after 2 seconds
             DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
                 isShowingTooltip.wrappedValue = false
             }
@@ -283,7 +288,7 @@ struct PreviewMessageView: View {
             }
             Spacer()
         }
-        .padding(.top, 180) // Position below stats bar
+        .padding(.top, 180)
         .animation(.easeInOut(duration: 0.2), value: showViewTooltip)
         .animation(.easeInOut(duration: 0.2), value: showChallengeTooltip)
         .animation(.easeInOut(duration: 0.2), value: showDefenseTooltip)
@@ -343,7 +348,6 @@ struct PreviewMessageView: View {
                 
                 Spacer()
                 
-                // Waveform placeholder
                 HStack(spacing: 2) {
                     ForEach(0..<5, id: \.self) { _ in
                         RoundedRectangle(cornerRadius: 2)

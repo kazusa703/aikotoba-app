@@ -1,8 +1,9 @@
 import SwiftUI
-import StoreKit
 
 struct StealSuccessView: View {
     @Environment(\.dismiss) private var dismiss
+    @StateObject private var storeKit = StoreKitManager.shared
+    
     let service: MessageService
     let message: Message
     
@@ -13,9 +14,11 @@ struct StealSuccessView: View {
     @State private var showingAutoSetAlert = false
     @State private var showConfetti = true
     
-    // ★追加: 4桁アップグレード関連
-    @State private var is4DigitMode: Bool
-    @State private var showingUpgradeAlert = false
+    // 桁数選択
+    @State private var selectedLength: Int
+    @State private var showingUpgradeSheet = false
+    @State private var upgradeTargetLength: Int = 4
+    @State private var upgradePasscode = ""
     @State private var isUpgrading = false
     @State private var upgradeError: String?
     
@@ -30,23 +33,13 @@ struct StealSuccessView: View {
         endPoint: .bottomTrailing
     )
     
-    private let goldGradient = LinearGradient(
-        colors: [
-            Color(red: 255/255, green: 215/255, blue: 0/255),
-            Color(red: 255/255, green: 193/255, blue: 37/255)
-        ],
-        startPoint: .topLeading,
-        endPoint: .bottomTrailing
-    )
-    
     private let subtleGray = Color(red: 250/255, green: 250/255, blue: 250/255)
     
     init(service: MessageService, message: Message, rootKeyword: Binding<String>) {
         self.service = service
         self.message = message
         self._rootKeyword = rootKeyword
-        // ★4桁モードを引き継ぐ
-        self._is4DigitMode = State(initialValue: message.is_4_digit)
+        self._selectedLength = State(initialValue: message.passcode_length)
     }
 
     var body: some View {
@@ -58,32 +51,20 @@ struct StealSuccessView: View {
             }
             
             ScrollView {
-                VStack(spacing: 28) {
+                VStack(spacing: 24) {
                     Spacer(minLength: 40)
                     
-                    // MARK: - Success Icon
                     successIcon
-                    
-                    // MARK: - Title
                     titleSection
-                    
-                    // MARK: - 4桁アップグレードセクション（3桁モードの場合のみ）
-                    if !is4DigitMode {
-                        upgradeSection
-                    }
-                    
-                    // MARK: - Passcode Input
+                    currentSecurityInfo
                     passcodeSection
-                    
-                    // MARK: - Submit Button
+                    upgradeOptions
                     submitButton
-                    
-                    // MARK: - Skip Button
                     skipButton
                     
-                    Spacer(minLength: 60)
+                    Spacer(minLength: 40)
                 }
-                .padding(.horizontal, 32)
+                .padding(.horizontal, 24)
             }
         }
         .alert("設定未完了", isPresented: $showingAutoSetAlert) {
@@ -92,33 +73,26 @@ struct StealSuccessView: View {
                 dismiss()
             }
         } message: {
-            Text("暗証番号は「\(is4DigitMode ? "0000" : "000")」に設定され、投稿は「非公開」になりました。\n\n24時間以内に設定しない場合、暗証番号「\(is4DigitMode ? "0000" : "000")」のまま自動的に公開されます。")
+            Text("暗証番号は「\(String(repeating: "0", count: selectedLength))」に設定され、投稿は「非公開」になりました。\n\n24時間後に自動的に公開されますが、暗証番号が簡単なため奪われやすい状態です。")
         }
-        .alert("4桁モードにアップグレード", isPresented: $showingUpgradeAlert) {
-            Button("キャンセル", role: .cancel) { }
-            Button("購入する (¥500)") {
-                Task { await purchaseUpgrade() }
-            }
-        } message: {
-            Text("4桁モードにすると、暗証番号が0000〜9999の10,000通りになり、奪われにくくなります。\n\nこの投稿を4桁モードにアップグレードしますか？")
+        .sheet(isPresented: $showingUpgradeSheet) {
+            upgradeSheetView
         }
         .interactiveDismissDisabled()
         .onAppear {
             DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
-                withAnimation {
-                    showConfetti = false
-                }
+                withAnimation { showConfetti = false }
             }
         }
     }
     
-    // MARK: - Confetti Overlay
+    // MARK: - Confetti
     private var confettiOverlay: some View {
         GeometryReader { proxy in
             ForEach(0..<30, id: \.self) { i in
                 Circle()
                     .fill([Color.purple, Color.pink, Color.orange, Color.yellow][i % 4])
-                    .frame(width: CGFloat.random(in: 8...16), height: CGFloat.random(in: 8...16))
+                    .frame(width: CGFloat.random(in: 8...16))
                     .position(
                         x: CGFloat.random(in: 0...proxy.size.width),
                         y: CGFloat.random(in: 0...proxy.size.height)
@@ -137,13 +111,7 @@ struct StealSuccessView: View {
                 .frame(width: 120, height: 120)
             
             Circle()
-                .fill(
-                    LinearGradient(
-                        colors: [Color.green.opacity(0.2), Color.green.opacity(0.1)],
-                        startPoint: .top,
-                        endPoint: .bottom
-                    )
-                )
+                .fill(Color.green.opacity(0.15))
                 .frame(width: 100, height: 100)
             
             Image(systemName: "checkmark")
@@ -152,7 +120,7 @@ struct StealSuccessView: View {
         }
     }
     
-    // MARK: - Title Section
+    // MARK: - Title
     private var titleSection: some View {
         VStack(spacing: 12) {
             Text("奪取成功！")
@@ -173,108 +141,44 @@ struct StealSuccessView: View {
         }
     }
     
-    // MARK: - Upgrade Section (3桁の場合のみ表示)
-    private var upgradeSection: some View {
-        VStack(spacing: 12) {
-            // 見出し
-            HStack {
-                Image(systemName: "sparkles")
-                    .foregroundColor(.yellow)
-                Text("今だけ特別オファー！")
+    // MARK: - Current Security Info
+    private var currentSecurityInfo: some View {
+        HStack(spacing: 12) {
+            Image(systemName: "shield.fill")
+                .font(.title2)
+                .foregroundColor(securityColor(for: selectedLength))
+            
+            VStack(alignment: .leading, spacing: 2) {
+                Text("現在のセキュリティ")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                
+                Text("\(selectedLength)桁 / \(combinationText(for: selectedLength))")
                     .font(.subheadline)
-                    .fontWeight(.bold)
-                Image(systemName: "sparkles")
-                    .foregroundColor(.yellow)
+                    .fontWeight(.semibold)
             }
             
-            // アップグレードカード
-            VStack(spacing: 16) {
-                HStack {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("🔒 4桁モードにアップグレード")
-                            .font(.headline)
-                            .foregroundColor(.primary)
-                        
-                        Text("10倍守りやすくなる！")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                    }
-                    
-                    Spacer()
-                    
-                    VStack(alignment: .trailing, spacing: 2) {
-                        Text("¥500")
-                            .font(.title2)
-                            .fontWeight(.bold)
-                            .foregroundColor(.orange)
-                        
-                        Text("買い切り")
-                            .font(.caption2)
-                            .foregroundColor(.secondary)
-                    }
-                }
-                
-                // 比較
-                HStack(spacing: 20) {
-                    VStack(spacing: 4) {
-                        Text("3桁")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                        Text("1,000通り")
-                            .font(.subheadline)
-                            .fontWeight(.medium)
-                    }
-                    
-                    Image(systemName: "arrow.right")
-                        .foregroundColor(.orange)
-                    
-                    VStack(spacing: 4) {
-                        Text("4桁")
-                            .font(.caption)
-                            .foregroundColor(.green)
-                        Text("10,000通り")
-                            .font(.subheadline)
-                            .fontWeight(.bold)
-                            .foregroundColor(.green)
-                    }
-                }
-                
-                // 購入ボタン
+            Spacer()
+            
+            if selectedLength < 10 {
                 Button {
-                    showingUpgradeAlert = true
+                    upgradeTargetLength = selectedLength + 1
+                    showingUpgradeSheet = true
                 } label: {
-                    HStack {
-                        if isUpgrading {
-                            ProgressView()
-                                .tint(.white)
-                        } else {
-                            Image(systemName: "lock.shield.fill")
-                            Text("4桁にアップグレード")
-                        }
-                    }
-                    .fontWeight(.bold)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 14)
-                    .background(goldGradient)
-                    .foregroundColor(.white)
-                    .cornerRadius(12)
-                }
-                .disabled(isUpgrading)
-                
-                if let error = upgradeError {
-                    Text(error)
+                    Text("強化する")
                         .font(.caption)
-                        .foregroundColor(.red)
+                        .fontWeight(.bold)
+                        .foregroundColor(.white)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 6)
+                        .background(instagramGradient)
+                        .cornerRadius(12)
                 }
             }
-            .padding(16)
-            .background(Color.orange.opacity(0.05))
-            .cornerRadius(16)
-            .overlay(
-                RoundedRectangle(cornerRadius: 16)
-                    .stroke(Color.orange.opacity(0.3), lineWidth: 1)
-            )
         }
+        .padding(16)
+        .background(subtleGray)
+        .cornerRadius(16)
     }
     
     // MARK: - Passcode Section
@@ -287,27 +191,25 @@ struct StealSuccessView: View {
                 
                 Spacer()
                 
-                // Mode indicator
                 HStack(spacing: 4) {
                     Image(systemName: "lock.fill")
-                    Text(is4DigitMode ? "4桁モード" : "3桁モード")
+                    Text("\(selectedLength)桁")
                 }
                 .font(.caption)
-                .foregroundColor(is4DigitMode ? .green : .orange)
+                .foregroundColor(securityColor(for: selectedLength))
                 .padding(.horizontal, 10)
                 .padding(.vertical, 4)
                 .background(
                     Capsule()
-                        .fill((is4DigitMode ? Color.green : Color.orange).opacity(0.1))
+                        .fill(securityColor(for: selectedLength).opacity(0.1))
                 )
             }
             
-            // Input
             HStack {
                 Image(systemName: "key.fill")
                     .foregroundColor(.gray)
                 
-                TextField(is4DigitMode ? "新しい4桁番号" : "新しい3桁番号", text: $newPasscode)
+                TextField(String(repeating: "0", count: selectedLength), text: $newPasscode)
                     .keyboardType(.numberPad)
                     .font(.title3)
             }
@@ -315,9 +217,8 @@ struct StealSuccessView: View {
             .background(subtleGray)
             .cornerRadius(16)
             .onChange(of: newPasscode) { _, val in
-                let limit = is4DigitMode ? 4 : 3
-                if val.count > limit {
-                    newPasscode = String(val.prefix(limit))
+                if val.count > selectedLength {
+                    newPasscode = String(val.prefix(selectedLength))
                 }
             }
             
@@ -330,6 +231,55 @@ struct StealSuccessView: View {
         .cornerRadius(20)
     }
     
+    // MARK: - Upgrade Options
+    private var upgradeOptions: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("🔒 セキュリティを強化")
+                .font(.subheadline)
+                .fontWeight(.semibold)
+            
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 12) {
+                    ForEach(availableUpgrades, id: \.length) { product in
+                        upgradeCard(product: product)
+                    }
+                }
+                .padding(.horizontal, 4)
+            }
+        }
+    }
+    
+    private var availableUpgrades: [PasscodeLengthProduct] {
+        PasscodeLengthProduct.availableUpgrades(from: selectedLength)
+    }
+    
+    private func upgradeCard(product: PasscodeLengthProduct) -> some View {
+        Button {
+            upgradeTargetLength = product.length
+            upgradePasscode = ""
+            showingUpgradeSheet = true
+        } label: {
+            VStack(spacing: 8) {
+                Text("\(product.length)桁")
+                    .font(.headline)
+                    .foregroundColor(.primary)
+                
+                Text(product.combinationCount)
+                    .font(.caption2)
+                    .foregroundColor(.secondary)
+                
+                Text(storeKit.displayPrice(for: product.length))
+                    .font(.caption)
+                    .fontWeight(.bold)
+                    .foregroundColor(.orange)
+            }
+            .frame(width: 80, height: 90)
+            .background(Color.white)
+            .cornerRadius(12)
+            .shadow(color: .black.opacity(0.05), radius: 5, x: 0, y: 2)
+        }
+    }
+    
     // MARK: - Submit Button
     private var submitButton: some View {
         Button {
@@ -337,25 +287,24 @@ struct StealSuccessView: View {
         } label: {
             HStack {
                 if isLoading {
-                    ProgressView()
-                        .tint(.white)
+                    ProgressView().tint(.white)
                 } else {
                     Image(systemName: "checkmark.circle.fill")
                     Text("設定して公開する")
                 }
             }
-            ..fontWeight(.bold)
+            .fontWeight(.bold)
             .frame(maxWidth: .infinity)
             .padding(.vertical, 16)
             .background(
-                newPasscode.isEmpty
-                ? AnyShapeStyle(Color.gray.opacity(0.3))
-                : AnyShapeStyle(instagramGradient)
+                newPasscode.count == selectedLength
+                ? instagramGradient
+                : LinearGradient(colors: [.gray.opacity(0.3)], startPoint: .leading, endPoint: .trailing)
             )
             .foregroundColor(.white)
             .cornerRadius(16)
-            }
-        .disabled(newPasscode.isEmpty || isLoading)
+        }
+        .disabled(newPasscode.count != selectedLength || isLoading)
     }
     
     // MARK: - Skip Button
@@ -369,7 +318,183 @@ struct StealSuccessView: View {
         }
     }
     
-    // MARK: - Methods
+    // MARK: - Upgrade Sheet
+    private var upgradeSheetView: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(spacing: 24) {
+                    // Icon
+                    ZStack {
+                        Circle()
+                            .fill(gradientForLength(upgradeTargetLength))
+                            .frame(width: 100, height: 100)
+                        
+                        Image(systemName: "lock.shield.fill")
+                            .font(.system(size: 44))
+                            .foregroundColor(.white)
+                    }
+                    .padding(.top, 20)
+                    
+                    // Title
+                    VStack(spacing: 8) {
+                        Text("\(upgradeTargetLength)桁にアップグレード")
+                            .font(.title2)
+                            .fontWeight(.bold)
+                        
+                        Text("\(combinationText(for: upgradeTargetLength))の組み合わせで守られます")
+                            .font(.subheadline)
+                            .foregroundColor(.secondary)
+                    }
+                    
+                    // Price
+                    Text(storeKit.displayPrice(for: upgradeTargetLength))
+                        .font(.title)
+                        .fontWeight(.bold)
+                        .foregroundColor(.orange)
+                    
+                    // Comparison
+                    comparisonView
+                    
+                    // Passcode Input
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("新しい\(upgradeTargetLength)桁の暗証番号")
+                            .font(.subheadline)
+                            .fontWeight(.semibold)
+                        
+                        HStack {
+                            Image(systemName: "key.fill")
+                                .foregroundColor(.gray)
+                            
+                            TextField(String(repeating: "0", count: upgradeTargetLength), text: $upgradePasscode)
+                                .keyboardType(.numberPad)
+                                .font(.title3)
+                        }
+                        .padding(16)
+                        .background(subtleGray)
+                        .cornerRadius(16)
+                        .onChange(of: upgradePasscode) { _, val in
+                            if val.count > upgradeTargetLength {
+                                upgradePasscode = String(val.prefix(upgradeTargetLength))
+                            }
+                        }
+                    }
+                    
+                    if let error = upgradeError {
+                        Text(error)
+                            .font(.caption)
+                            .foregroundColor(.red)
+                    }
+                    
+                    // Purchase Button
+                    Button {
+                        Task { await purchaseUpgrade() }
+                    } label: {
+                        HStack {
+                            if isUpgrading {
+                                ProgressView().tint(.white)
+                            } else {
+                                Text("\(storeKit.displayPrice(for: upgradeTargetLength))で購入")
+                                    .fontWeight(.bold)
+                            }
+                        }
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 16)
+                        .background(
+                            upgradePasscode.count == upgradeTargetLength
+                            ? gradientForLength(upgradeTargetLength)
+                            : LinearGradient(colors: [.gray.opacity(0.3)], startPoint: .leading, endPoint: .trailing)
+                        )
+                        .foregroundColor(.white)
+                        .cornerRadius(16)
+                    }
+                    .disabled(upgradePasscode.count != upgradeTargetLength || isUpgrading)
+                    
+                    Spacer(minLength: 40)
+                }
+                .padding(24)
+            }
+            .navigationTitle("アップグレード")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Button("キャンセル") {
+                        showingUpgradeSheet = false
+                    }
+                }
+            }
+        }
+    }
+    
+    private var comparisonView: some View {
+        HStack(spacing: 20) {
+            VStack(spacing: 4) {
+                Text("現在")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                Text("\(selectedLength)桁")
+                    .font(.headline)
+                Text(combinationText(for: selectedLength))
+                    .font(.caption2)
+                    .foregroundColor(.secondary)
+            }
+            
+            Image(systemName: "arrow.right")
+                .foregroundColor(.secondary)
+            
+            VStack(spacing: 4) {
+                Text("アップグレード後")
+                    .font(.caption)
+                    .foregroundColor(.orange)
+                Text("\(upgradeTargetLength)桁")
+                    .font(.headline)
+                    .foregroundColor(.orange)
+                Text(combinationText(for: upgradeTargetLength))
+                    .font(.caption2)
+                    .foregroundColor(.orange)
+            }
+        }
+        .padding(16)
+        .background(subtleGray)
+        .cornerRadius(16)
+    }
+    
+    // MARK: - Helper Methods
+    
+    private func securityColor(for length: Int) -> Color {
+        switch length {
+        case 3: return .orange
+        case 4: return .yellow
+        case 5: return .green
+        case 6: return .blue
+        case 7: return .purple
+        case 8...10: return .pink
+        default: return .gray
+        }
+    }
+    
+    private func gradientForLength(_ length: Int) -> LinearGradient {
+        let color = securityColor(for: length)
+        return LinearGradient(
+            colors: [color, color.opacity(0.7)],
+            startPoint: .topLeading,
+            endPoint: .bottomTrailing
+        )
+    }
+    
+    private func combinationText(for length: Int) -> String {
+        let count = Int(pow(10.0, Double(length)))
+        if count >= 1_000_000_000 { return "100億通り" }
+        if count >= 100_000_000 { return "1億通り" }
+        if count >= 10_000_000 { return "1,000万通り" }
+        if count >= 1_000_000 { return "100万通り" }
+        if count >= 100_000 { return "10万通り" }
+        if count >= 10_000 { return "1万通り" }
+        if count >= 1_000 { return "1,000通り" }
+        return "\(count)通り"
+    }
+    
+    // MARK: - Actions
+    
     private func updatePasscode() async {
         isLoading = true
         defer { isLoading = false }
@@ -384,12 +509,11 @@ struct StealSuccessView: View {
                 remainingImageUrls: message.image_urls ?? [],
                 newImagesData: [],
                 passcode: newPasscode,
-                is4Digit: is4DigitMode
+                passcodeLength: selectedLength
             )
             
             rootKeyword = ""
             dismiss()
-            
         } catch {
             print("Update error: \(error)")
         }
@@ -400,67 +524,34 @@ struct StealSuccessView: View {
         upgradeError = nil
         defer { isUpgrading = false }
         
-        // TODO: 実際のStoreKit課金処理を実装
-        // 今は仮でアップグレード成功とする
-        
         do {
-            // 仮の処理時間
-            try await Task.sleep(nanoseconds: 1_000_000_000)
+            let purchased = try await storeKit.purchase(length: upgradeTargetLength)
             
-            // DBを4桁モードに更新
-            _ = try await service.upgradeTo4Digit(message: message)
+            guard purchased else {
+                return
+            }
             
-            await MainActor.run {
-                withAnimation {
-                    is4DigitMode = true
-                    newPasscode = "" // 桁数が変わるのでリセット
+            let result = try await service.upgradePasscodeLength(
+                messageId: message.id,
+                newLength: upgradeTargetLength,
+                newPasscode: upgradePasscode
+            )
+            
+            if result == "success" {
+                await MainActor.run {
+                    selectedLength = upgradeTargetLength
+                    newPasscode = upgradePasscode
+                    showingUpgradeSheet = false
                 }
+                
+                rootKeyword = ""
+                dismiss()
+            } else {
+                upgradeError = "アップグレードに失敗しました: \(result)"
             }
         } catch {
-            await MainActor.run {
-                upgradeError = "アップグレードに失敗しました"
-            }
+            print("Purchase error: \(error)")
+            upgradeError = error.localizedDescription
         }
     }
 }
-
-
-// MARK: - StoreKit Helper (将来の課金実装用)
-/*
-class StoreKitManager: ObservableObject {
-    static let shared = StoreKitManager()
-    
-    @Published var products: [Product] = []
-    
-    private let productIds = ["com.aikotoba.upgrade4digit"]
-    
-    func loadProducts() async {
-        do {
-            products = try await Product.products(for: productIds)
-        } catch {
-            print("Failed to load products: \(error)")
-        }
-    }
-    
-    func purchase(_ product: Product) async throws -> Bool {
-        let result = try await product.purchase()
-        
-        switch result {
-        case .success(let verification):
-            switch verification {
-            case .verified(let transaction):
-                await transaction.finish()
-                return true
-            case .unverified:
-                return false
-            }
-        case .userCancelled:
-            return false
-        case .pending:
-            return false
-        @unknown default:
-            return false
-        }
-    }
-}
-*/

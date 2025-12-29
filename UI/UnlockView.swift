@@ -36,10 +36,14 @@ struct UnlockView: View {
     
     private let subtleGray = Color(red: 250/255, green: 250/255, blue: 250/255)
     
+    private var passcodeLength: Int {
+        targetMessage.passcode_length
+    }
+    
     enum HintResult {
-        case exact      // ◎ 数字と位置が一致
-        case partial    // ○ 数字は合っているが位置が違う
-        case wrong      // × 数字が含まれていない
+        case exact      // ◎
+        case partial    // ○
+        case wrong      // ×
         
         var symbol: String {
             switch self {
@@ -73,21 +77,14 @@ struct UnlockView: View {
                     VStack(spacing: 32) {
                         Spacer()
                         
-                        // MARK: - Lock Icon
                         lockIcon
-                        
-                        // MARK: - Title
                         titleSection
                         
-                        // MARK: - Hints Display
                         if showHints && !hints.isEmpty {
                             hintsDisplay
                         }
                         
-                        // MARK: - Input Section
                         inputSection
-                        
-                        // MARK: - Submit Button
                         submitButton
                         
                         Spacer()
@@ -117,9 +114,7 @@ struct UnlockView: View {
                     }
                 }
                 .alert("挑戦回数終了", isPresented: $showingLimitAlert) {
-                    Button("OK") {
-                        dismiss()
-                    }
+                    Button("OK") { dismiss() }
                 } message: {
                     Text("本日の挑戦回数は終了しました。\nまた明日挑戦してください。")
                 }
@@ -134,7 +129,7 @@ struct UnlockView: View {
                 .stroke(
                     isDecrypting
                     ? instagramGradient
-                    : LinearGradient(colors: [targetMessage.is_4_digit ? .green : .orange], startPoint: .top, endPoint: .bottom),
+                    : LinearGradient(colors: [securityColor], startPoint: .top, endPoint: .bottom),
                     lineWidth: 4
                 )
                 .frame(width: 120, height: 120)
@@ -145,23 +140,34 @@ struct UnlockView: View {
             
             if isDecrypting {
                 Text(decodingText)
-                    .font(.system(size: 28, weight: .bold, design: .monospaced))
+                    .font(.system(size: passcodeLength > 6 ? 20 : 28, weight: .bold, design: .monospaced))
                     .foregroundStyle(instagramGradient)
                     .onReceive(timer) { _ in
-                        let digits = targetMessage.is_4_digit ? 4 : 3
-                        let maxVal = Int(pow(10.0, Double(digits))) - 1
+                        let maxVal = Int(pow(10.0, Double(passcodeLength))) - 1
                         let randomNum = Int.random(in: 0...maxVal)
-                        decodingText = String(format: "%0*d", digits, randomNum)
+                        decodingText = String(format: "%0*d", passcodeLength, randomNum)
                     }
             } else {
                 Image(systemName: "lock.fill")
                     .font(.system(size: 40))
-                    .foregroundColor(targetMessage.is_4_digit ? .green : .orange)
+                    .foregroundColor(securityColor)
             }
         }
     }
     
-    // MARK: - Title Section
+    private var securityColor: Color {
+        switch passcodeLength {
+        case 3: return .orange
+        case 4: return .yellow
+        case 5: return .green
+        case 6: return .blue
+        case 7: return .purple
+        case 8...10: return .pink
+        default: return .gray
+        }
+    }
+    
+    // MARK: - Title
     private var titleSection: some View {
         VStack(spacing: 8) {
             Text(isDecrypting ? "解析中..." : "暗証番号を入力")
@@ -173,17 +179,39 @@ struct UnlockView: View {
                 .foregroundColor(.secondary)
             
             HStack(spacing: 4) {
-                Image(systemName: targetMessage.is_4_digit ? "lock.shield.fill" : "lock.fill")
-                Text(targetMessage.is_4_digit ? "4桁（高難易度）" : "3桁")
+                Image(systemName: securityIcon)
+                Text("\(passcodeLength)桁" + difficultyText)
             }
             .font(.caption)
-            .foregroundColor(targetMessage.is_4_digit ? .green : .orange)
+            .foregroundColor(securityColor)
             .padding(.horizontal, 12)
             .padding(.vertical, 6)
             .background(
                 Capsule()
-                    .fill((targetMessage.is_4_digit ? Color.green : Color.orange).opacity(0.1))
+                    .fill(securityColor.opacity(0.1))
             )
+        }
+    }
+    
+    private var securityIcon: String {
+        switch passcodeLength {
+        case 3: return "lock.fill"
+        case 4...5: return "lock.shield.fill"
+        case 6...7: return "shield.fill"
+        case 8...10: return "shield.checkered"
+        default: return "lock.fill"
+        }
+    }
+    
+    private var difficultyText: String {
+        switch passcodeLength {
+        case 3: return ""
+        case 4: return "（やや難）"
+        case 5: return "（難）"
+        case 6: return "（高難度）"
+        case 7: return "（超難）"
+        case 8...10: return "（極難）"
+        default: return ""
         }
     }
     
@@ -194,14 +222,15 @@ struct UnlockView: View {
                 .font(.caption)
                 .foregroundColor(.secondary)
             
-            HStack(spacing: 16) {
+            // 桁数が多い場合は折り返し
+            let columns = passcodeLength <= 6 ? passcodeLength : 5
+            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 8), count: columns), spacing: 8) {
                 ForEach(hints.indices, id: \.self) { index in
                     VStack(spacing: 4) {
                         Text(hints[index].symbol)
-                            .font(.system(size: 32, weight: .bold))
+                            .font(.system(size: passcodeLength > 6 ? 24 : 32, weight: .bold))
                             .foregroundColor(hints[index].color)
                         
-                        // Show the digit that was entered
                         if index < inputPasscode.count {
                             let digitIndex = inputPasscode.index(inputPasscode.startIndex, offsetBy: index)
                             Text(String(inputPasscode[digitIndex]))
@@ -209,9 +238,9 @@ struct UnlockView: View {
                                 .foregroundColor(.secondary)
                         }
                     }
-                    .frame(width: 50, height: 60)
+                    .frame(width: 44, height: 55)
                     .background(hints[index].color.opacity(0.1))
-                    .cornerRadius(12)
+                    .cornerRadius(8)
                 }
             }
             
@@ -248,23 +277,20 @@ struct UnlockView: View {
                     Image(systemName: "key.fill")
                         .foregroundColor(.gray)
                     
-                    TextField(targetMessage.is_4_digit ? "0000" : "000", text: $inputPasscode)
+                    TextField(String(repeating: "0", count: passcodeLength), text: $inputPasscode)
                         .keyboardType(.numberPad)
                         .font(.title2)
                         .multilineTextAlignment(.center)
                         .disabled(isLoading)
                         .onChange(of: inputPasscode) { _, newValue in
-                            // Clear hints when user starts typing new input
                             if showHints {
                                 withAnimation {
                                     showHints = false
                                     hints = []
                                 }
                             }
-                            // Limit input length
-                            let limit = targetMessage.is_4_digit ? 4 : 3
-                            if newValue.count > limit {
-                                inputPasscode = String(newValue.prefix(limit))
+                            if newValue.count > passcodeLength {
+                                inputPasscode = String(newValue.prefix(passcodeLength))
                             }
                         }
                 }
@@ -281,7 +307,6 @@ struct UnlockView: View {
                 HStack(spacing: 6) {
                     Image(systemName: "xmark.circle.fill")
                         .foregroundColor(.red)
-                    
                     Text(errorMessage)
                         .foregroundColor(.red)
                 }
@@ -308,14 +333,14 @@ struct UnlockView: View {
             .frame(maxWidth: .infinity)
             .padding(.vertical, 16)
             .background(
-                inputPasscode.isEmpty || isDecrypting
+                inputPasscode.count != passcodeLength || isDecrypting
                 ? AnyShapeStyle(Color.gray.opacity(0.3))
                 : AnyShapeStyle(instagramGradient)
             )
             .foregroundColor(.white)
             .cornerRadius(16)
         }
-        .disabled(inputPasscode.isEmpty || isDecrypting)
+        .disabled(inputPasscode.count != passcodeLength || isDecrypting)
     }
     
     // MARK: - Methods
@@ -323,13 +348,9 @@ struct UnlockView: View {
         isLoading = true
         errorMessage = nil
         
-        // Store the input for hint display
         let attemptedPasscode = inputPasscode
         
-        // Start decryption animation
         withAnimation { isDecrypting = true }
-        
-        // Wait for dramatic effect
         try? await Task.sleep(nanoseconds: 2_000_000_000)
         
         defer {
@@ -346,23 +367,18 @@ struct UnlockView: View {
             if result == "success" {
                 decodingText = attemptedPasscode
                 try? await Task.sleep(nanoseconds: 500_000_000)
+                withAnimation { isSuccess = true }
                 
-                withAnimation {
-                    isSuccess = true
-                }
             } else if result == "limit_exceeded" {
                 showingLimitAlert = true
+                
             } else if result.hasPrefix("failed:") {
-                // Parse hints from server response (format: "failed:◎×○")
                 let hintString = String(result.dropFirst(7))
                 parseHints(from: hintString, attemptedPasscode: attemptedPasscode)
-                
                 withAnimation(.spring(response: 0.4, dampingFraction: 0.7)) {
                     showHints = true
                 }
             } else {
-                // Fallback: generate hints client-side if server doesn't provide them
-                // Note: This is just for UI demonstration - real hints need server support
                 errorMessage = "番号が違います"
                 inputPasscode = ""
             }
@@ -376,21 +392,15 @@ struct UnlockView: View {
         
         for char in hintString {
             switch char {
-            case "◎":
-                hints.append(.exact)
-            case "○":
-                hints.append(.partial)
-            case "×":
-                hints.append(.wrong)
-            default:
-                break
+            case "◎": hints.append(.exact)
+            case "○": hints.append(.partial)
+            case "×": hints.append(.wrong)
+            default: break
             }
         }
         
-        // If no hints parsed, show all wrong
         if hints.isEmpty {
-            let digitCount = targetMessage.is_4_digit ? 4 : 3
-            hints = Array(repeating: .wrong, count: digitCount)
+            hints = Array(repeating: .wrong, count: passcodeLength)
         }
         
         inputPasscode = attemptedPasscode
