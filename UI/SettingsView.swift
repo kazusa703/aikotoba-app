@@ -18,17 +18,6 @@ struct SettingsView: View {
     @State private var notifyOnStolen: Bool = true
     @State private var notifyOnAttempts: Bool = true
     @State private var isNotificationAuthorized: Bool = false
-    
-    // Instagram Colors
-    private let instagramGradient = LinearGradient(
-        colors: [
-            Color(red: 131/255, green: 58/255, blue: 180/255),
-            Color(red: 253/255, green: 29/255, blue: 29/255),
-            Color(red: 252/255, green: 176/255, blue: 69/255)
-        ],
-        startPoint: .topLeading,
-        endPoint: .bottomTrailing
-    )
 
     var body: some View {
         List {
@@ -41,7 +30,7 @@ struct SettingsView: View {
                         HStack(spacing: 12) {
                             ZStack {
                                 Circle()
-                                    .fill(instagramGradient)
+                                    .fill(AppColors.primaryGradient)
                                     .frame(width: 40, height: 40)
                                 
                                 Image(systemName: "person.badge.plus")
@@ -53,11 +42,11 @@ struct SettingsView: View {
                                 Text("ログイン / 新規登録")
                                     .font(.body)
                                     .fontWeight(.semibold)
-                                    .foregroundColor(.primary)
+                                    .foregroundColor(AppColors.textPrimary)
                                 
                                 Text("すべての機能を使えるようになります")
                                     .font(.caption)
-                                    .foregroundColor(.secondary)
+                                    .foregroundColor(AppColors.textSecondary)
                             }
                         }
                         .padding(.vertical, 4)
@@ -71,10 +60,13 @@ struct SettingsView: View {
                 // MARK: - アカウント情報セクション（ログイン時）
                 Section("アカウント情報") {
                     HStack {
+                        Image(systemName: "envelope.fill")
+                            .foregroundColor(AppColors.primary)
+                            .frame(width: 24)
                         Text("メールアドレス")
                         Spacer()
                         Text(userEmail)
-                            .foregroundColor(.secondary)
+                            .foregroundColor(AppColors.textSecondary)
                     }
                 }
                 
@@ -83,12 +75,13 @@ struct SettingsView: View {
                     // プッシュ通知のオン/オフ
                     Toggle(isOn: $pushEnabled) {
                         HStack(spacing: 12) {
-                            Image(systemName: "bell.badge")
-                                .foregroundColor(.blue)
+                            Image(systemName: "bell.badge.fill")
+                                .foregroundColor(AppColors.accent)
                                 .frame(width: 24)
                             Text("プッシュ通知")
                         }
                     }
+                    .tint(AppColors.primary)
                     .onChange(of: pushEnabled) { _, newValue in
                         Task { await updatePushEnabled(newValue) }
                     }
@@ -98,16 +91,17 @@ struct SettingsView: View {
                         Toggle(isOn: $notifyOnStolen) {
                             HStack(spacing: 12) {
                                 Image(systemName: "exclamationmark.triangle.fill")
-                                    .foregroundColor(.red)
+                                    .foregroundColor(AppColors.error)
                                     .frame(width: 24)
                                 VStack(alignment: .leading) {
                                     Text("奪われた時")
                                     Text("投稿が他のユーザーに奪われた時に通知")
                                         .font(.caption)
-                                        .foregroundColor(.secondary)
+                                        .foregroundColor(AppColors.textSecondary)
                                 }
                             }
                         }
+                        .tint(AppColors.primary)
                         .onChange(of: notifyOnStolen) { _, newValue in
                             Task { await updateNotifyOnStolen(newValue) }
                         }
@@ -116,16 +110,17 @@ struct SettingsView: View {
                         Toggle(isOn: $notifyOnAttempts) {
                             HStack(spacing: 12) {
                                 Image(systemName: "shield.fill")
-                                    .foregroundColor(.orange)
+                                    .foregroundColor(AppColors.warning)
                                     .frame(width: 24)
                                 VStack(alignment: .leading) {
                                     Text("挑戦された時")
                                     Text("10回挑戦されるごとに通知")
                                         .font(.caption)
-                                        .foregroundColor(.secondary)
+                                        .foregroundColor(AppColors.textSecondary)
                                 }
                             }
                         }
+                        .tint(AppColors.primary)
                         .onChange(of: notifyOnAttempts) { _, newValue in
                             Task { await updateNotifyOnAttempts(newValue) }
                         }
@@ -139,7 +134,7 @@ struct SettingsView: View {
                         } label: {
                             Text("通知の許可が必要です。タップして許可してください。")
                                 .font(.caption)
-                                .foregroundColor(.blue)
+                                .foregroundColor(AppColors.accent)
                         }
                     }
                 }
@@ -149,23 +144,29 @@ struct SettingsView: View {
             Section("法的情報") {
                 Link(destination: URL(string: "https://kazusa703.github.io/aikotoba-legal/terms.html")!) {
                     HStack {
+                        Image(systemName: "doc.text.fill")
+                            .foregroundColor(AppColors.primary)
+                            .frame(width: 24)
                         Text("利用規約")
-                            .foregroundColor(.primary)
+                            .foregroundColor(AppColors.textPrimary)
                         Spacer()
                         Image(systemName: "chevron.right")
                             .font(.caption)
-                            .foregroundColor(.secondary)
+                            .foregroundColor(AppColors.textSecondary)
                     }
                 }
                 
                 Link(destination: URL(string: "https://kazusa703.github.io/aikotoba-legal/privacy.html")!) {
                     HStack {
+                        Image(systemName: "hand.raised.fill")
+                            .foregroundColor(AppColors.primary)
+                            .frame(width: 24)
                         Text("プライバシーポリシー")
-                            .foregroundColor(.primary)
+                            .foregroundColor(AppColors.textPrimary)
                         Spacer()
                         Image(systemName: "chevron.right")
                             .font(.caption)
-                            .foregroundColor(.secondary)
+                            .foregroundColor(AppColors.textSecondary)
                     }
                 }
             }
@@ -178,9 +179,10 @@ struct SettingsView: View {
                     } label: {
                         HStack {
                             Image(systemName: "rectangle.portrait.and.arrow.right")
-                                .foregroundColor(.orange)
+                                .foregroundColor(AppColors.warning)
+                                .frame(width: 24)
                             Text("ログアウト")
-                                .foregroundColor(.orange)
+                                .foregroundColor(AppColors.warning)
                         }
                     }
                 }
@@ -191,17 +193,18 @@ struct SettingsView: View {
                         showingDeleteAlert = true
                     } label: {
                         HStack {
-                            Image(systemName: "trash")
-                                .foregroundColor(.red)
+                            Image(systemName: "trash.fill")
+                                .foregroundColor(AppColors.error)
+                                .frame(width: 24)
                             Text("アカウント削除")
-                                .foregroundColor(.red)
+                                .foregroundColor(AppColors.error)
                         }
                     }
                     .disabled(isLoading)
                 } footer: {
                     Text("アカウントを削除すると、これまでの投稿データはすべて消去され、復元することはできません。")
                         .font(.caption)
-                        .foregroundColor(.secondary)
+                        .foregroundColor(AppColors.textSecondary)
                 }
             } else {
                 // ゲストモード終了
@@ -210,10 +213,11 @@ struct SettingsView: View {
                         sessionStore.exitGuestMode()
                     } label: {
                         HStack {
-                            Image(systemName: "arrow.left.circle")
-                                .foregroundColor(.secondary)
+                            Image(systemName: "arrow.left.circle.fill")
+                                .foregroundColor(AppColors.textSecondary)
+                                .frame(width: 24)
                             Text("ログイン画面に戻る")
-                                .foregroundColor(.secondary)
+                                .foregroundColor(AppColors.textSecondary)
                         }
                     }
                 }

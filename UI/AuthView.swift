@@ -14,30 +14,11 @@ struct AuthView: View {
     @EnvironmentObject var sessionStore: SessionStore
 
     private let authService = AuthService.shared
-    
-    // Instagram Colors
-    private let instagramGradient = LinearGradient(
-        colors: [
-            Color(red: 131/255, green: 58/255, blue: 180/255),
-            Color(red: 253/255, green: 29/255, blue: 29/255),
-            Color(red: 252/255, green: 176/255, blue: 69/255)
-        ],
-        startPoint: .topLeading,
-        endPoint: .bottomTrailing
-    )
-    
-    private let disabledGradient = LinearGradient(
-        colors: [Color.gray.opacity(0.3), Color.gray.opacity(0.3)],
-        startPoint: .topLeading,
-        endPoint: .bottomTrailing
-    )
-    
-    private let subtleGray = Color(red: 250/255, green: 250/255, blue: 250/255)
-    private let borderGray = Color(red: 219/255, green: 219/255, blue: 219/255)
 
     var body: some View {
         ZStack {
-            Color.white.ignoresSafeArea()
+            // Background
+            AppColors.background.ignoresSafeArea()
             
             ScrollView(showsIndicators: false) {
                 VStack(spacing: 0) {
@@ -53,35 +34,36 @@ struct AuthView: View {
                     
                     Spacer().frame(height: 24)
                     
-                    // MARK: - Input Fields
-                    inputSection
-                    
-                    Spacer().frame(height: 20)
-                    
-                    // MARK: - Submit Button
-                    submitButton
+                    // MARK: - Card Container
+                    VStack(spacing: 20) {
+                        // Input Fields
+                        inputSection
+                        
+                        // Submit Button
+                        submitButton
+                        
+                        // Divider
+                        dividerSection
+                        
+                        // Social Login
+                        socialLoginSection
+                        
+                        // Guest Mode
+                        guestModeButton
+                    }
+                    .padding(24)
+                    .background(Color.white)
+                    .cornerRadius(20)
+                    .shadow(color: AppColors.primary.opacity(0.1), radius: 10, x: 0, y: 5)
                     
                     Spacer().frame(height: 24)
-                    
-                    // MARK: - Divider
-                    dividerSection
-                    
-                    Spacer().frame(height: 20)
-                    
-                    // MARK: - Social Login Buttons
-                    socialLoginSection
-                    
-                    Spacer().frame(height: 24)
-                    
-                    // MARK: - Guest Mode Button
-                    guestModeButton
-                    
-                    Spacer().frame(height: 40)
                     
                     // MARK: - Bottom Switch
                     bottomSwitch
+                    
+                    Spacer().frame(height: 40)
                 }
-                .padding(.horizontal, 32)
+                .padding(.horizontal, 24)
             }
         }
     }
@@ -89,23 +71,25 @@ struct AuthView: View {
     // MARK: - Logo Section
     private var logoSection: some View {
         VStack(spacing: 16) {
+            // Lock Icon with Circle
             ZStack {
                 Circle()
-                    .stroke(instagramGradient, lineWidth: 3)
-                    .frame(width: 80, height: 80)
+                    .fill(AppColors.primaryGradient)
+                    .frame(width: 90, height: 90)
+                    .shadow(color: AppColors.primary.opacity(0.3), radius: 10, x: 0, y: 5)
                 
                 Image(systemName: "lock.fill")
-                    .font(.system(size: 32))
-                    .foregroundStyle(instagramGradient)
+                    .font(.system(size: 36, weight: .medium))
+                    .foregroundColor(.white)
             }
             
             Text("aikotoba")
-                .font(.system(size: 36, weight: .bold, design: .serif))
-                .italic()
+                .font(.system(size: 32, weight: .bold, design: .rounded))
+                .foregroundColor(AppColors.textPrimary)
             
             Text("秘密の合言葉で繋がる")
                 .font(.subheadline)
-                .foregroundColor(.secondary)
+                .foregroundColor(AppColors.textSecondary)
         }
     }
     
@@ -113,22 +97,23 @@ struct AuthView: View {
     private var modeTitle: some View {
         VStack(spacing: 8) {
             Text(isSignUpMode ? "アカウント作成" : "ログイン")
-                .font(.title2)
+                .font(.title3)
                 .fontWeight(.bold)
+                .foregroundColor(AppColors.textPrimary)
             
             Text(isSignUpMode ? "メールアドレスで新しいアカウントを作成" : "既存のアカウントでログイン")
                 .font(.caption)
-                .foregroundColor(.secondary)
+                .foregroundColor(AppColors.textSecondary)
         }
     }
     
     // MARK: - Input Section
     private var inputSection: some View {
         VStack(spacing: 12) {
-            // メールアドレス
+            // Email
             HStack {
                 Image(systemName: "envelope")
-                    .foregroundColor(.gray)
+                    .foregroundColor(AppColors.primary)
                     .frame(width: 20)
                 
                 TextField("メールアドレス", text: $email)
@@ -137,66 +122,65 @@ struct AuthView: View {
                     .disableAutocorrection(true)
             }
             .padding(14)
-            .background(subtleGray)
-            .cornerRadius(8)
+            .background(AppColors.background)
+            .cornerRadius(12)
             .overlay(
-                RoundedRectangle(cornerRadius: 8)
-                    .stroke(borderGray, lineWidth: 1)
+                RoundedRectangle(cornerRadius: 12)
+                    .stroke(AppColors.border, lineWidth: 1)
             )
             
-            // パスワード
+            // Password
             HStack {
                 Image(systemName: "lock")
-                    .foregroundColor(.gray)
+                    .foregroundColor(AppColors.primary)
                     .frame(width: 20)
                 
                 SecureField(isSignUpMode ? "パスワード（6文字以上）" : "パスワード", text: $password)
             }
             .padding(14)
-            .background(subtleGray)
-            .cornerRadius(8)
+            .background(AppColors.background)
+            .cornerRadius(12)
             .overlay(
-                RoundedRectangle(cornerRadius: 8)
-                    .stroke(borderGray, lineWidth: 1)
+                RoundedRectangle(cornerRadius: 12)
+                    .stroke(AppColors.border, lineWidth: 1)
             )
             
-            // パスワード確認（新規登録時のみ）
+            // Confirm Password (Sign Up only)
             if isSignUpMode {
                 HStack {
                     Image(systemName: "lock.fill")
-                        .foregroundColor(.gray)
+                        .foregroundColor(AppColors.primary)
                         .frame(width: 20)
                     
                     SecureField("パスワード（再入力）", text: $confirmPassword)
                 }
                 .padding(14)
-                .background(subtleGray)
-                .cornerRadius(8)
+                .background(AppColors.background)
+                .cornerRadius(12)
                 .overlay(
-                    RoundedRectangle(cornerRadius: 8)
-                        .stroke(passwordsMatch ? borderGray : Color.red.opacity(0.5), lineWidth: 1)
+                    RoundedRectangle(cornerRadius: 12)
+                        .stroke(passwordsMatch ? AppColors.border : AppColors.error.opacity(0.5), lineWidth: 1)
                 )
                 
-                // パスワード不一致の警告
                 if !confirmPassword.isEmpty && !passwordsMatch {
                     HStack {
                         Image(systemName: "exclamationmark.circle")
                         Text("パスワードが一致しません")
                     }
                     .font(.caption)
-                    .foregroundColor(.red)
+                    .foregroundColor(AppColors.error)
                     .frame(maxWidth: .infinity, alignment: .leading)
                 }
             }
             
-            // エラーメッセージ
+            // Error Message
             if let errorMessage {
                 HStack {
                     Image(systemName: "exclamationmark.circle")
                     Text(errorMessage)
                 }
                 .font(.caption)
-                .foregroundColor(.red)
+                .foregroundColor(AppColors.error)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.top, 4)
             }
@@ -220,9 +204,9 @@ struct AuthView: View {
             }
             .frame(maxWidth: .infinity)
             .padding(.vertical, 14)
-            .background(canSubmit ? instagramGradient : disabledGradient)
+            .background(canSubmit ? AppColors.primaryGradient : AppColors.disabledGradient)
             .foregroundColor(.white)
-            .cornerRadius(8)
+            .cornerRadius(12)
         }
         .disabled(!canSubmit || isLoading)
     }
@@ -231,16 +215,16 @@ struct AuthView: View {
     private var dividerSection: some View {
         HStack {
             Rectangle()
-                .fill(borderGray)
+                .fill(AppColors.border)
                 .frame(height: 1)
             
             Text("または")
                 .font(.caption)
-                .foregroundColor(.secondary)
+                .foregroundColor(AppColors.textSecondary)
                 .padding(.horizontal, 16)
             
             Rectangle()
-                .fill(borderGray)
+                .fill(AppColors.border)
                 .frame(height: 1)
         }
     }
@@ -267,7 +251,7 @@ struct AuthView: View {
                 .padding(.vertical, 14)
                 .background(Color.black)
                 .foregroundColor(.white)
-                .cornerRadius(8)
+                .cornerRadius(12)
             }
             .disabled(isAppleLoading || isGoogleLoading)
             
@@ -278,7 +262,7 @@ struct AuthView: View {
                 HStack(spacing: 8) {
                     if isGoogleLoading {
                         ProgressView()
-                            .tint(.primary)
+                            .tint(AppColors.textPrimary)
                     } else {
                         GoogleLogoView()
                         Text("Googleで続ける")
@@ -288,11 +272,11 @@ struct AuthView: View {
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 14)
                 .background(Color.white)
-                .foregroundColor(.primary)
-                .cornerRadius(8)
+                .foregroundColor(AppColors.textPrimary)
+                .cornerRadius(12)
                 .overlay(
-                    RoundedRectangle(cornerRadius: 8)
-                        .stroke(borderGray, lineWidth: 1)
+                    RoundedRectangle(cornerRadius: 12)
+                        .stroke(AppColors.border, lineWidth: 1)
                 )
             }
             .disabled(isAppleLoading || isGoogleLoading)
@@ -312,40 +296,31 @@ struct AuthView: View {
             }
             .frame(maxWidth: .infinity)
             .padding(.vertical, 14)
-            .background(Color.white)
-            .foregroundColor(.secondary)
-            .cornerRadius(8)
-            .overlay(
-                RoundedRectangle(cornerRadius: 8)
-                    .stroke(borderGray, lineWidth: 1)
-            )
+            .background(AppColors.background)
+            .foregroundColor(AppColors.textSecondary)
+            .cornerRadius(12)
         }
     }
     
     // MARK: - Bottom Switch
     private var bottomSwitch: some View {
-        VStack(spacing: 0) {
-            Divider()
+        HStack(spacing: 4) {
+            Text(isSignUpMode ? "既にアカウントをお持ちですか？" : "アカウントをお持ちでないですか？")
+                .font(.subheadline)
+                .foregroundColor(AppColors.textSecondary)
             
-            HStack(spacing: 4) {
-                Text(isSignUpMode ? "既にアカウントをお持ちですか？" : "アカウントをお持ちでないですか？")
-                    .font(.subheadline)
-                    .foregroundColor(.secondary)
-                
-                Button {
-                    withAnimation(.easeInOut(duration: 0.2)) {
-                        isSignUpMode.toggle()
-                        errorMessage = nil
-                        confirmPassword = ""
-                    }
-                } label: {
-                    Text(isSignUpMode ? "ログインはこちら" : "新規作成はこちら")
-                        .font(.subheadline)
-                        .fontWeight(.bold)
-                        .foregroundStyle(instagramGradient)
+            Button {
+                withAnimation(.easeInOut(duration: 0.2)) {
+                    isSignUpMode.toggle()
+                    errorMessage = nil
+                    confirmPassword = ""
                 }
+            } label: {
+                Text(isSignUpMode ? "ログインはこちら" : "新規作成はこちら")
+                    .font(.subheadline)
+                    .fontWeight(.bold)
+                    .foregroundColor(AppColors.primary)
             }
-            .padding(.vertical, 20)
         }
     }
 

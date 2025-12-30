@@ -2,6 +2,8 @@ import SwiftUI
 import AuthenticationServices
 
 struct AuthPromptView: View {
+    let feature: String  // "投稿" or "挑戦"
+    
     @Environment(\.dismiss) private var dismiss
     @EnvironmentObject var sessionStore: SessionStore
     
@@ -14,62 +16,50 @@ struct AuthPromptView: View {
     @State private var errorMessage: String?
     
     private let authService = AuthService.shared
-    
-    let feature: String // "投稿" or "挑戦"
-    
-    // Instagram Colors
-    private let instagramGradient = LinearGradient(
-        colors: [
-            Color(red: 131/255, green: 58/255, blue: 180/255),
-            Color(red: 253/255, green: 29/255, blue: 29/255),
-            Color(red: 252/255, green: 176/255, blue: 69/255)
-        ],
-        startPoint: .topLeading,
-        endPoint: .bottomTrailing
-    )
-    
-    private let disabledGradient = LinearGradient(
-        colors: [Color.gray.opacity(0.3), Color.gray.opacity(0.3)],
-        startPoint: .topLeading,
-        endPoint: .bottomTrailing
-    )
-    
-    private let subtleGray = Color(red: 250/255, green: 250/255, blue: 250/255)
-    private let borderGray = Color(red: 219/255, green: 219/255, blue: 219/255)
-    
+
     var body: some View {
         NavigationStack {
-            ScrollView {
-                VStack(spacing: 24) {
-                    // MARK: - Header
-                    headerSection
-                    
-                    // MARK: - Social Login Buttons
-                    socialLoginSection
-                    
-                    // MARK: - Divider
-                    dividerSection
-                    
-                    // MARK: - Input Fields
-                    inputSection
-                    
-                    // MARK: - Submit Button
-                    submitButton
-                    
-                    // MARK: - Toggle Mode
-                    toggleModeButton
+            ZStack {
+                AppColors.background.ignoresSafeArea()
+                
+                ScrollView(showsIndicators: false) {
+                    VStack(spacing: 24) {
+                        // MARK: - Header
+                        headerSection
+                        
+                        // MARK: - Card Container
+                        VStack(spacing: 20) {
+                            // Input Fields
+                            inputSection
+                            
+                            // Submit Button
+                            submitButton
+                            
+                            // Divider
+                            dividerSection
+                            
+                            // Social Login
+                            socialLoginSection
+                        }
+                        .padding(24)
+                        .background(Color.white)
+                        .cornerRadius(20)
+                        .shadow(color: AppColors.primary.opacity(0.1), radius: 10, x: 0, y: 5)
+                        
+                        // Mode Switch
+                        modeSwitch
+                    }
+                    .padding(24)
                 }
-                .padding(24)
             }
-            .background(Color.white)
-            .navigationTitle(isSignUpMode ? "新規登録" : "ログイン")
+            .navigationTitle("")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
                     Button("キャンセル") {
                         dismiss()
                     }
-                    .foregroundColor(.primary)
+                    .foregroundColor(AppColors.textSecondary)
                 }
             }
         }
@@ -80,25 +70,112 @@ struct AuthPromptView: View {
         VStack(spacing: 16) {
             ZStack {
                 Circle()
-                    .stroke(instagramGradient, lineWidth: 3)
-                    .frame(width: 80, height: 80)
+                    .fill(AppColors.primaryGradient)
+                    .frame(width: 70, height: 70)
                 
-                Image(systemName: feature == "投稿" ? "plus.circle.fill" : "lock.open.fill")
-                    .font(.system(size: 36))
-                    .foregroundStyle(instagramGradient)
+                Image(systemName: feature == "投稿" ? "square.and.pencil" : "lock.open.fill")
+                    .font(.system(size: 28))
+                    .foregroundColor(.white)
             }
             
             Text("\(feature)するにはログインが必要です")
-                .font(.title3)
-                .fontWeight(.bold)
-                .multilineTextAlignment(.center)
+                .font(.headline)
+                .foregroundColor(AppColors.textPrimary)
             
-            Text("アカウントを作成して、すべての機能をお楽しみください")
+            Text("アカウントを作成すると、すべての機能を利用できます")
                 .font(.subheadline)
-                .foregroundColor(.secondary)
+                .foregroundColor(AppColors.textSecondary)
                 .multilineTextAlignment(.center)
         }
-        .padding(.top, 20)
+    }
+    
+    // MARK: - Input Section
+    private var inputSection: some View {
+        VStack(spacing: 12) {
+            HStack {
+                Image(systemName: "envelope")
+                    .foregroundColor(AppColors.primary)
+                    .frame(width: 20)
+                
+                TextField("メールアドレス", text: $email)
+                    .keyboardType(.emailAddress)
+                    .textInputAutocapitalization(.never)
+                    .disableAutocorrection(true)
+            }
+            .padding(14)
+            .background(AppColors.background)
+            .cornerRadius(12)
+            .overlay(
+                RoundedRectangle(cornerRadius: 12)
+                    .stroke(AppColors.border, lineWidth: 1)
+            )
+            
+            HStack {
+                Image(systemName: "lock")
+                    .foregroundColor(AppColors.primary)
+                    .frame(width: 20)
+                
+                SecureField("パスワード", text: $password)
+            }
+            .padding(14)
+            .background(AppColors.background)
+            .cornerRadius(12)
+            .overlay(
+                RoundedRectangle(cornerRadius: 12)
+                    .stroke(AppColors.border, lineWidth: 1)
+            )
+            
+            if let errorMessage {
+                HStack {
+                    Image(systemName: "exclamationmark.circle")
+                    Text(errorMessage)
+                }
+                .font(.caption)
+                .foregroundColor(AppColors.error)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+        }
+    }
+    
+    // MARK: - Submit Button
+    private var submitButton: some View {
+        Button {
+            Task { await submit() }
+        } label: {
+            HStack {
+                if isLoading {
+                    ProgressView()
+                        .tint(.white)
+                } else {
+                    Text(isSignUpMode ? "アカウント作成" : "ログイン")
+                        .fontWeight(.semibold)
+                }
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 14)
+            .background(canSubmit ? AppColors.primaryGradient : AppColors.disabledGradient)
+            .foregroundColor(.white)
+            .cornerRadius(12)
+        }
+        .disabled(!canSubmit || isLoading)
+    }
+    
+    // MARK: - Divider Section
+    private var dividerSection: some View {
+        HStack {
+            Rectangle()
+                .fill(AppColors.border)
+                .frame(height: 1)
+            
+            Text("または")
+                .font(.caption)
+                .foregroundColor(AppColors.textSecondary)
+                .padding(.horizontal, 16)
+            
+            Rectangle()
+                .fill(AppColors.border)
+                .frame(height: 1)
+        }
     }
     
     // MARK: - Social Login Section
@@ -115,7 +192,7 @@ struct AuthPromptView: View {
                     } else {
                         Image(systemName: "apple.logo")
                             .font(.system(size: 18))
-                        Text("Appleでサインイン")
+                        Text("Appleで続ける")
                             .fontWeight(.medium)
                     }
                 }
@@ -123,7 +200,7 @@ struct AuthPromptView: View {
                 .padding(.vertical, 14)
                 .background(Color.black)
                 .foregroundColor(.white)
-                .cornerRadius(8)
+                .cornerRadius(12)
             }
             .disabled(isAppleLoading || isGoogleLoading)
             
@@ -134,134 +211,44 @@ struct AuthPromptView: View {
                 HStack(spacing: 8) {
                     if isGoogleLoading {
                         ProgressView()
-                            .tint(.primary)
+                            .tint(AppColors.textPrimary)
                     } else {
                         GoogleLogoView()
-                        Text("Googleでサインイン")
+                        Text("Googleで続ける")
                             .fontWeight(.medium)
                     }
                 }
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 14)
                 .background(Color.white)
-                .foregroundColor(.primary)
-                .cornerRadius(8)
+                .foregroundColor(AppColors.textPrimary)
+                .cornerRadius(12)
                 .overlay(
-                    RoundedRectangle(cornerRadius: 8)
-                        .stroke(borderGray, lineWidth: 1)
+                    RoundedRectangle(cornerRadius: 12)
+                        .stroke(AppColors.border, lineWidth: 1)
                 )
             }
             .disabled(isAppleLoading || isGoogleLoading)
         }
     }
     
-    // MARK: - Divider Section
-    private var dividerSection: some View {
-        HStack {
-            Rectangle()
-                .fill(borderGray)
-                .frame(height: 1)
-            
-            Text("または")
-                .font(.caption)
-                .foregroundColor(.secondary)
-                .padding(.horizontal, 16)
-            
-            Rectangle()
-                .fill(borderGray)
-                .frame(height: 1)
-        }
-    }
-    
-    // MARK: - Input Section
-    private var inputSection: some View {
-        VStack(spacing: 12) {
-            HStack {
-                Image(systemName: "envelope")
-                    .foregroundColor(.gray)
-                    .frame(width: 20)
-                
-                TextField("メールアドレス", text: $email)
-                    .keyboardType(.emailAddress)
-                    .textInputAutocapitalization(.never)
-                    .disableAutocorrection(true)
-            }
-            .padding(14)
-            .background(subtleGray)
-            .cornerRadius(8)
-            .overlay(
-                RoundedRectangle(cornerRadius: 8)
-                    .stroke(borderGray, lineWidth: 1)
-            )
-            
-            HStack {
-                Image(systemName: "lock")
-                    .foregroundColor(.gray)
-                    .frame(width: 20)
-                
-                SecureField("パスワード（6文字以上）", text: $password)
-            }
-            .padding(14)
-            .background(subtleGray)
-            .cornerRadius(8)
-            .overlay(
-                RoundedRectangle(cornerRadius: 8)
-                    .stroke(borderGray, lineWidth: 1)
-            )
-            
-            if let errorMessage {
-                HStack {
-                    Image(systemName: "exclamationmark.circle")
-                    Text(errorMessage)
-                }
-                .font(.caption)
-                .foregroundColor(.red)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.top, 4)
-            }
-        }
-    }
-    
-    // MARK: - Submit Button
-    private var submitButton: some View {
-        Button {
-            Task { await submit() }
-        } label: {
-            HStack {
-                if isLoading {
-                    ProgressView()
-                        .tint(.white)
-                } else {
-                    Text(isSignUpMode ? "新規登録" : "ログイン")
-                        .fontWeight(.semibold)
-                }
-            }
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 14)
-            .background(canSubmit ? instagramGradient : disabledGradient)
-            .foregroundColor(.white)
-            .cornerRadius(8)
-        }
-        .disabled(!canSubmit || isLoading)
-    }
-    
-    // MARK: - Toggle Mode Button
-    private var toggleModeButton: some View {
+    // MARK: - Mode Switch
+    private var modeSwitch: some View {
         HStack(spacing: 4) {
-            Text(isSignUpMode ? "アカウントをお持ちですか？" : "アカウントをお持ちでないですか？")
+            Text(isSignUpMode ? "既にアカウントをお持ちですか？" : "アカウントをお持ちでないですか？")
                 .font(.subheadline)
-                .foregroundColor(.secondary)
+                .foregroundColor(AppColors.textSecondary)
             
             Button {
-                withAnimation(.easeInOut(duration: 0.2)) {
+                withAnimation {
                     isSignUpMode.toggle()
                     errorMessage = nil
                 }
             } label: {
-                Text(isSignUpMode ? "ログイン" : "登録する")
+                Text(isSignUpMode ? "ログイン" : "新規登録")
                     .font(.subheadline)
-                    .fontWeight(.semibold)
-                    .foregroundStyle(instagramGradient)
+                    .fontWeight(.bold)
+                    .foregroundColor(AppColors.primary)
             }
         }
     }
@@ -290,11 +277,9 @@ struct AuthPromptView: View {
         } catch {
             print("Auth error: \(error)")
             await MainActor.run {
-                if isSignUpMode {
-                    errorMessage = "登録に失敗しました。別のメールアドレスをお試しください。"
-                } else {
-                    errorMessage = "ログインに失敗しました。メールアドレスとパスワードをご確認ください。"
-                }
+                errorMessage = isSignUpMode
+                    ? "登録に失敗しました。別のメールアドレスをお試しください。"
+                    : "ログインに失敗しました。メールアドレスとパスワードをご確認ください。"
             }
         }
     }
@@ -329,8 +314,10 @@ struct AuthPromptView: View {
             dismiss()
         } catch {
             print("Google Sign-In error: \(error)")
-            await MainActor.run {
-                errorMessage = "Googleサインインに失敗しました"
+            if (error as NSError).code != 1 {
+                await MainActor.run {
+                    errorMessage = "Googleサインインに失敗しました"
+                }
             }
         }
     }

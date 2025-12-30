@@ -6,46 +6,39 @@ struct NotificationsView: View {
     @State private var isLoading = true
     
     let service = MessageService()
-    
-    // Instagram Colors
-    private let instagramGradient = LinearGradient(
-        colors: [
-            Color(red: 131/255, green: 58/255, blue: 180/255),
-            Color(red: 253/255, green: 29/255, blue: 29/255),
-            Color(red: 252/255, green: 176/255, blue: 69/255)
-        ],
-        startPoint: .topLeading,
-        endPoint: .bottomTrailing
-    )
 
     var body: some View {
-        ScrollView {
-            LazyVStack(spacing: 0) {
-                if isLoading {
-                    ProgressView()
-                        .padding(.top, 50)
-                } else if notifications.isEmpty {
-                    emptyState
-                } else {
-                    // 未読セクション
-                    if !unreadNotifications.isEmpty {
-                        sectionHeader("新着")
-                        ForEach(unreadNotifications) { notification in
-                            notificationRow(notification)
+        ZStack {
+            AppColors.background.ignoresSafeArea()
+            
+            ScrollView {
+                LazyVStack(spacing: 0) {
+                    if isLoading {
+                        ProgressView()
+                            .tint(AppColors.primary)
+                            .padding(.top, 50)
+                    } else if notifications.isEmpty {
+                        emptyState
+                    } else {
+                        // 未読セクション
+                        if !unreadNotifications.isEmpty {
+                            sectionHeader("新着")
+                            ForEach(unreadNotifications) { notification in
+                                notificationRow(notification)
+                            }
                         }
-                    }
-                    
-                    // 既読セクション
-                    if !readNotifications.isEmpty {
-                        sectionHeader("以前")
-                        ForEach(readNotifications) { notification in
-                            notificationRow(notification)
+                        
+                        // 既読セクション
+                        if !readNotifications.isEmpty {
+                            sectionHeader("以前")
+                            ForEach(readNotifications) { notification in
+                                notificationRow(notification)
+                            }
                         }
                     }
                 }
             }
         }
-        .background(Color.white)
         .navigationTitle("アクティビティ")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
@@ -55,6 +48,7 @@ struct NotificationsView: View {
                         Task { await markAllAsRead() }
                     }
                     .font(.subheadline)
+                    .foregroundColor(AppColors.primary)
                 }
             }
         }
@@ -83,12 +77,12 @@ struct NotificationsView: View {
             Text(title)
                 .font(.subheadline)
                 .fontWeight(.bold)
-                .foregroundColor(.primary)
+                .foregroundColor(AppColors.textPrimary)
             Spacer()
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 12)
-        .background(Color(uiColor: .systemGroupedBackground))
+        .background(AppColors.background)
     }
     
     private func notificationRow(_ notification: AppNotification) -> some View {
@@ -110,16 +104,16 @@ struct NotificationsView: View {
                     Text(notification.title)
                         .font(.subheadline)
                         .fontWeight(notification.is_read ? .regular : .bold)
-                        .foregroundColor(.primary)
+                        .foregroundColor(AppColors.textPrimary)
                     
                     Text(notification.body)
                         .font(.caption)
-                        .foregroundColor(.secondary)
+                        .foregroundColor(AppColors.textSecondary)
                         .lineLimit(2)
                     
                     Text(timeAgo(notification.created_at))
                         .font(.caption2)
-                        .foregroundColor(.secondary)
+                        .foregroundColor(AppColors.textSecondary)
                 }
                 
                 Spacer()
@@ -127,13 +121,13 @@ struct NotificationsView: View {
                 // 未読マーク
                 if !notification.is_read {
                     Circle()
-                        .fill(Color.blue)
+                        .fill(AppColors.accent)
                         .frame(width: 8, height: 8)
                 }
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 12)
-            .background(notification.is_read ? Color.white : Color.blue.opacity(0.05))
+            .background(notification.is_read ? Color.white : AppColors.accent.opacity(0.05))
             .contentShape(Rectangle())
             .onTapGesture {
                 Task {
@@ -150,20 +144,21 @@ struct NotificationsView: View {
         VStack(spacing: 16) {
             ZStack {
                 Circle()
-                    .stroke(instagramGradient, lineWidth: 2)
+                    .fill(AppColors.primaryGradient)
                     .frame(width: 80, height: 80)
                 
                 Image(systemName: "bell")
                     .font(.system(size: 32))
-                    .foregroundStyle(instagramGradient)
+                    .foregroundColor(.white)
             }
             
             Text("アクティビティはありません")
                 .font(.headline)
+                .foregroundColor(AppColors.textPrimary)
             
             Text("投稿が奪われたり、奪取の試みがあった場合にここに表示されます")
                 .font(.subheadline)
-                .foregroundColor(.secondary)
+                .foregroundColor(AppColors.textSecondary)
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, 40)
         }

@@ -27,52 +27,42 @@ struct RootView: View {
     @State private var unreadCount: Int = 0
 
     private let service = MessageService()
-    
-    // Instagram Colors
-    private let instagramGradient = LinearGradient(
-        colors: [
-            Color(red: 131/255, green: 58/255, blue: 180/255),
-            Color(red: 253/255, green: 29/255, blue: 29/255),
-            Color(red: 252/255, green: 176/255, blue: 69/255)
-        ],
-        startPoint: .topLeading,
-        endPoint: .bottomTrailing
-    )
-    
-    private let disabledGradient = LinearGradient(
-        colors: [Color.gray.opacity(0.3), Color.gray.opacity(0.3)],
-        startPoint: .topLeading,
-        endPoint: .bottomTrailing
-    )
-    
-    private let subtleGray = Color(red: 250/255, green: 250/255, blue: 250/255)
 
     var body: some View {
         NavigationStack {
-            ScrollView {
-                VStack(spacing: 24) {
-                    // ゲストモードバナー
-                    if sessionStore.isGuestMode {
-                        guestModeBanner
+            ZStack {
+                AppColors.background.ignoresSafeArea()
+                
+                ScrollView {
+                    VStack(spacing: 24) {
+                        // ゲストモードバナー
+                        if sessionStore.isGuestMode {
+                            guestModeBanner
+                        }
+                        
+                        // MARK: - Search Section
+                        searchSection
+                        
+                        // MARK: - Hero Section
+                        heroSection
+                        
+                        // MARK: - How It Works
+                        howItWorksSection
                     }
-                    
-                    // MARK: - Search Section
-                    searchSection
-                    
-                    // MARK: - Hero Section
-                    heroSection
-                    
-                    // MARK: - How It Works
-                    howItWorksSection
+                    .padding(.horizontal, 16)
+                    .padding(.bottom, 40)
                 }
-                .padding(.horizontal, 16)
-                .padding(.bottom, 40)
             }
-            .background(Color.white)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
+                ToolbarItem(placement: .principal) {
+                    Text("aikotoba")
+                        .font(.system(size: 20, weight: .bold, design: .rounded))
+                        .foregroundColor(AppColors.textPrimary)
+                }
+                
                 ToolbarItem(placement: .navigationBarTrailing) {
-                    HStack(spacing: 20) {
+                    HStack(spacing: 16) {
                         // 新規投稿
                         Button {
                             if sessionStore.isGuestMode {
@@ -81,9 +71,9 @@ struct RootView: View {
                                 showingNewMessageSheet = true
                             }
                         } label: {
-                            Image(systemName: "plus.app")
+                            Image(systemName: "plus.circle.fill")
                                 .font(.system(size: 22))
-                                .foregroundColor(.primary)
+                                .foregroundColor(AppColors.primary)
                         }
                         
                         // お知らせ（バッジ付き）
@@ -94,9 +84,9 @@ struct RootView: View {
                                 }
                         } label: {
                             ZStack(alignment: .topTrailing) {
-                                Image(systemName: "bell")
+                                Image(systemName: "bell.fill")
                                     .font(.system(size: 20))
-                                    .foregroundColor(.primary)
+                                    .foregroundColor(AppColors.primary)
                                 
                                 // 未読バッジ
                                 if unreadCount > 0 {
@@ -105,7 +95,7 @@ struct RootView: View {
                                         .foregroundColor(.white)
                                         .padding(.horizontal, 5)
                                         .padding(.vertical, 2)
-                                        .background(Color.red)
+                                        .background(AppColors.error)
                                         .clipShape(Capsule())
                                         .offset(x: 8, y: -8)
                                 }
@@ -116,18 +106,18 @@ struct RootView: View {
                         NavigationLink {
                             MyMessagesView()
                         } label: {
-                            Image(systemName: "person.circle")
+                            Image(systemName: "person.circle.fill")
                                 .font(.system(size: 22))
-                                .foregroundColor(.primary)
+                                .foregroundColor(AppColors.primary)
                         }
                         
                         // 設定・メニュー
                         NavigationLink {
                             SettingsView()
                         } label: {
-                            Image(systemName: "line.3.horizontal")
+                            Image(systemName: "gearshape.fill")
                                 .font(.system(size: 20))
-                                .foregroundColor(.primary)
+                                .foregroundColor(AppColors.primary)
                         }
                     }
                 }
@@ -196,15 +186,16 @@ struct RootView: View {
     private var guestModeBanner: some View {
         HStack(spacing: 12) {
             Image(systemName: "person.fill.questionmark")
-                .foregroundColor(.orange)
+                .foregroundColor(AppColors.warning)
             
             VStack(alignment: .leading, spacing: 2) {
                 Text("ゲストモード")
                     .font(.subheadline)
                     .fontWeight(.semibold)
+                    .foregroundColor(AppColors.textPrimary)
                 Text("一部機能が制限されています")
                     .font(.caption)
-                    .foregroundColor(.secondary)
+                    .foregroundColor(AppColors.textSecondary)
             }
             
             Spacer()
@@ -218,12 +209,12 @@ struct RootView: View {
                     .foregroundColor(.white)
                     .padding(.horizontal, 12)
                     .padding(.vertical, 6)
-                    .background(instagramGradient)
+                    .background(AppColors.primary)
                     .cornerRadius(12)
             }
         }
         .padding(12)
-        .background(Color.orange.opacity(0.1))
+        .background(AppColors.warning.opacity(0.1))
         .cornerRadius(12)
     }
     
@@ -232,7 +223,7 @@ struct RootView: View {
         VStack(spacing: 12) {
             HStack {
                 Image(systemName: "magnifyingglass")
-                    .foregroundColor(.gray)
+                    .foregroundColor(AppColors.primary)
                 
                 TextField("合言葉を入力", text: $keyword)
                     .textInputAutocapitalization(.never)
@@ -243,13 +234,14 @@ struct RootView: View {
                         keyword = ""
                     } label: {
                         Image(systemName: "xmark.circle.fill")
-                            .foregroundColor(.gray)
+                            .foregroundColor(AppColors.textSecondary)
                     }
                 }
             }
-            .padding(12)
-            .background(subtleGray)
+            .padding(14)
+            .background(Color.white)
             .cornerRadius(12)
+            .shadow(color: AppColors.primary.opacity(0.08), radius: 8, x: 0, y: 2)
             
             Button {
                 Task { await search() }
@@ -268,8 +260,8 @@ struct RootView: View {
                 .padding(.vertical, 14)
                 .background(
                     keyword.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-                    ? disabledGradient
-                    : instagramGradient
+                    ? AppColors.disabledGradient
+                    : AppColors.primaryGradient
                 )
                 .foregroundColor(.white)
                 .cornerRadius(12)
@@ -282,7 +274,7 @@ struct RootView: View {
                     Text(errorMessage)
                 }
                 .font(.caption)
-                .foregroundColor(.red)
+                .foregroundColor(AppColors.error)
             }
         }
         .padding(.top, 8)
@@ -293,20 +285,22 @@ struct RootView: View {
         VStack(spacing: 16) {
             ZStack {
                 Circle()
-                    .stroke(instagramGradient, lineWidth: 3)
+                    .fill(AppColors.primaryGradient)
                     .frame(width: 100, height: 100)
+                    .shadow(color: AppColors.primary.opacity(0.3), radius: 10, x: 0, y: 5)
                 
                 Image(systemName: "lock.fill")
                     .font(.system(size: 40))
-                    .foregroundStyle(instagramGradient)
+                    .foregroundColor(.white)
             }
             
             Text("秘密の合言葉で繋がる")
                 .font(.headline)
+                .foregroundColor(AppColors.textPrimary)
             
             Text("合言葉を知っている人だけがアクセスできる\nメッセージを作成・共有しよう")
                 .font(.subheadline)
-                .foregroundColor(.secondary)
+                .foregroundColor(AppColors.textSecondary)
                 .multilineTextAlignment(.center)
         }
         .padding(.vertical, 24)
@@ -317,6 +311,7 @@ struct RootView: View {
         VStack(alignment: .leading, spacing: 16) {
             Text("使い方")
                 .font(.headline)
+                .foregroundColor(AppColors.textPrimary)
             
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 16) {
@@ -324,21 +319,21 @@ struct RootView: View {
                         icon: "plus.circle.fill",
                         title: "作成する",
                         description: "合言葉と暗証番号を設定して投稿",
-                        color: .green
+                        color: AppColors.success
                     )
                     
                     howToCard(
                         icon: "magnifyingglass.circle.fill",
                         title: "検索する",
                         description: "合言葉で投稿を探す",
-                        color: .blue
+                        color: AppColors.accent
                     )
                     
                     howToCard(
                         icon: "lock.open.fill",
                         title: "奪う",
                         description: "暗証番号を当てて奪取",
-                        color: .purple
+                        color: AppColors.primaryDark
                     )
                 }
             }
@@ -354,15 +349,17 @@ struct RootView: View {
             Text(title)
                 .font(.subheadline)
                 .fontWeight(.semibold)
+                .foregroundColor(AppColors.textPrimary)
             
             Text(description)
                 .font(.caption)
-                .foregroundColor(.secondary)
+                .foregroundColor(AppColors.textSecondary)
         }
         .frame(width: 140)
         .padding(16)
-        .background(subtleGray)
+        .background(Color.white)
         .cornerRadius(16)
+        .shadow(color: AppColors.primary.opacity(0.08), radius: 8, x: 0, y: 2)
     }
     
     // MARK: - Search Function
