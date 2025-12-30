@@ -1,8 +1,9 @@
 import SwiftUI
-import Supabase  // ← 追加
+import Supabase
 
 @main
 struct AikotobaApp: App {
+    @UIApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
     @StateObject private var sessionStore = SessionStore()
 
     var body: some Scene {
@@ -18,6 +19,12 @@ struct AikotobaApp: App {
             .onOpenURL { url in
                 Task {
                     await handleOpenURL(url)
+                }
+            }
+            .task {
+                // ログイン時にプッシュ通知の許可状態を確認
+                if sessionStore.isSignedIn {
+                    await PushNotificationManager.shared.checkAuthorizationStatus()
                 }
             }
         }

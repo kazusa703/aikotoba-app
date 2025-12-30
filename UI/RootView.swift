@@ -22,6 +22,9 @@ struct RootView: View {
     
     // 認証促進シート
     @State private var showingAuthPrompt = false
+    
+    // 未読通知数
+    @State private var unreadCount: Int = 0
 
     private let service = MessageService()
     
@@ -83,13 +86,30 @@ struct RootView: View {
                                 .foregroundColor(.primary)
                         }
                         
-                        // お知らせ
+                        // お知らせ（バッジ付き）
                         NavigationLink {
                             NotificationsView()
+                                .onDisappear {
+                                    Task { await loadUnreadCount() }
+                                }
                         } label: {
-                            Image(systemName: "bell")
-                                .font(.system(size: 20))
-                                .foregroundColor(.primary)
+                            ZStack(alignment: .topTrailing) {
+                                Image(systemName: "bell")
+                                    .font(.system(size: 20))
+                                    .foregroundColor(.primary)
+                                
+                                // 未読バッジ
+                                if unreadCount > 0 {
+                                    Text(unreadCount > 99 ? "99+" : "\(unreadCount)")
+                                        .font(.system(size: 10, weight: .bold))
+                                        .foregroundColor(.white)
+                                        .padding(.horizontal, 5)
+                                        .padding(.vertical, 2)
+                                        .background(Color.red)
+                                        .clipShape(Capsule())
+                                        .offset(x: 8, y: -8)
+                                }
+                            }
                         }
                         
                         // マイページ
@@ -151,6 +171,24 @@ struct RootView: View {
             .sheet(isPresented: $showingAuthPrompt) {
                 AuthPromptView(feature: "投稿")
             }
+            // 画面表示時に未読数を取得
+            .task {
+                await loadUnreadCount()
+            }
+        }
+    }
+    
+    // MARK: - Load Unread Count
+    private func loadUnreadCount() async {
+        guard !sessionStore.isGuestMode else {
+            unreadCount = 0
+            return
+        }
+        
+        do {
+            unreadCount = try await service.getUnreadNotificationCount()
+        } catch {
+            print("Unread count error: \(error)")
         }
     }
     

@@ -458,18 +458,51 @@ final class MessageService: @unchecked Sendable {
         return try decoder.decode([AppNotification].self, from: response.data)
     }
     
+    
     // MARK: - Owner Check
     
     func isOwner(of message: Message) -> Bool {
-        if message.ownerToken == ownerToken {
-            return true
+            if message.ownerToken == ownerToken {
+                return true
+            }
+            
+            if let currentUserId = supabase.auth.currentUser?.id,
+               let messageUserId = message.user_id {
+                return currentUserId == messageUserId
+            }
+            
+            return false
+        }
+
+        // ↓↓↓ ここから追加してください ↓↓↓
+
+        // MARK: - Notifications
+
+        // 通知を既読にする
+        func markNotificationRead(_ notificationId: UUID) async throws {
+            try await supabase
+                .rpc("mark_notification_read", params: ["notification_id": notificationId.uuidString])
+                .execute()
         }
         
-        if let currentUserId = supabase.auth.currentUser?.id,
-           let messageUserId = message.user_id {
-            return currentUserId == messageUserId
+        // すべての通知を既読にする
+        func markAllNotificationsRead() async throws {
+            try await supabase
+                .rpc("mark_all_notifications_read")
+                .execute()
         }
         
-        return false
-    }
-}
+        // 未読通知数を取得
+        func getUnreadNotificationCount() async throws -> Int {
+            let response = try await supabase
+                .rpc("get_unread_notification_count")
+                .execute()
+                
+            // レスポンスから数値をデコード
+            let count = try JSONDecoder().decode(Int.self, from: response.data)
+            return count
+        }
+
+        // ↑↑↑ ここまで追加 ↑↑↑
+
+    } // ← クラスの閉じカッコ

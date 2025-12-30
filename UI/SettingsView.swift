@@ -13,6 +13,12 @@ struct SettingsView: View {
     @State private var isLoading = false
     @State private var showingAuthPrompt = false
     
+    // 通知設定
+    @State private var pushEnabled: Bool = true
+    @State private var notifyOnStolen: Bool = true
+    @State private var notifyOnAttempts: Bool = true
+    @State private var isNotificationAuthorized: Bool = false
+    
     // Instagram Colors
     private let instagramGradient = LinearGradient(
         colors: [
@@ -69,6 +75,72 @@ struct SettingsView: View {
                         Spacer()
                         Text(userEmail)
                             .foregroundColor(.secondary)
+                    }
+                }
+                
+                // MARK: - 通知設定セクション（ログイン時のみ）
+                Section {
+                    // プッシュ通知のオン/オフ
+                    Toggle(isOn: $pushEnabled) {
+                        HStack(spacing: 12) {
+                            Image(systemName: "bell.badge")
+                                .foregroundColor(.blue)
+                                .frame(width: 24)
+                            Text("プッシュ通知")
+                        }
+                    }
+                    .onChange(of: pushEnabled) { _, newValue in
+                        Task { await updatePushEnabled(newValue) }
+                    }
+                    
+                    if pushEnabled {
+                        // 奪われた時の通知
+                        Toggle(isOn: $notifyOnStolen) {
+                            HStack(spacing: 12) {
+                                Image(systemName: "exclamationmark.triangle.fill")
+                                    .foregroundColor(.red)
+                                    .frame(width: 24)
+                                VStack(alignment: .leading) {
+                                    Text("奪われた時")
+                                    Text("投稿が他のユーザーに奪われた時に通知")
+                                        .font(.caption)
+                                        .foregroundColor(.secondary)
+                                }
+                            }
+                        }
+                        .onChange(of: notifyOnStolen) { _, newValue in
+                            Task { await updateNotifyOnStolen(newValue) }
+                        }
+                        
+                        // 挑戦された時の通知
+                        Toggle(isOn: $notifyOnAttempts) {
+                            HStack(spacing: 12) {
+                                Image(systemName: "shield.fill")
+                                    .foregroundColor(.orange)
+                                    .frame(width: 24)
+                                VStack(alignment: .leading) {
+                                    Text("挑戦された時")
+                                    Text("10回挑戦されるごとに通知")
+                                        .font(.caption)
+                                        .foregroundColor(.secondary)
+                                }
+                            }
+                        }
+                        .onChange(of: notifyOnAttempts) { _, newValue in
+                            Task { await updateNotifyOnAttempts(newValue) }
+                        }
+                    }
+                } header: {
+                    Text("通知")
+                } footer: {
+                    if !isNotificationAuthorized && pushEnabled {
+                        Button {
+                            Task { await requestNotificationPermission() }
+                        } label: {
+                            Text("通知の許可が必要です。タップして許可してください。")
+                                .font(.caption)
+                                .foregroundColor(.blue)
+                        }
                     }
                 }
             }
@@ -151,11 +223,18 @@ struct SettingsView: View {
         .navigationBarTitleDisplayMode(.inline)
         .task {
             if !sessionStore.isGuestMode {
+                // メールアドレス取得
                 if let user = SupabaseClientManager.shared.client.auth.currentUser {
                     self.userEmail = user.email ?? "不明"
                 } else {
                     self.userEmail = "未ログイン"
                 }
+                
+                // 通知設定取得
+                await loadNotificationSettings()
+                
+                // 通知許可状態を確認
+                await checkNotificationAuthorization()
             }
         }
         // ログアウト確認アラート
@@ -163,6 +242,8 @@ struct SettingsView: View {
             Button("キャンセル", role: .cancel) { }
             Button("ログアウト", role: .destructive) {
                 Task {
+                    // プッシュトークンを削除
+                    await PushNotificationManager.shared.removeTokenFromSupabase()
                     await sessionStore.signOut()
                 }
             }
@@ -193,6 +274,71 @@ struct SettingsView: View {
                         .cornerRadius(10)
                 }
             }
+        }
+    }
+    
+    // MARK: - 通知許可状態を確認
+    private func checkNotificationAuthorization() async {
+        await PushNotificationManager.shared.checkAuthorizationStatus()
+        isNotificationAuthorized = PushNotificationManager.shared.isAuthorized
+    }
+    
+    // MARK: - 通知設定読み込み
+    private func loadNotificationSettings() async {
+        do {
+            let settings = try await PushNotificationManager.shared.fetchNotificationSettings()
+            await MainActor.run {
+                self.pushEnabled = settings.push_enabled
+                self.notifyOnStolen = settings.notify_on_stolen
+                self.notifyOnAttempts = settings.notify_on_attempts
+            }
+        } catch {
+            print("通知設定取得エラー: \(error)")
+        }
+    }
+    
+    // MARK: - 通知許可リクエスト
+    private func requestNotificationPermission() async {
+        let granted = await PushNotificationManager.shared.requestAuthorization()
+        isNotificationAuthorized = granted
+        
+        if !granted {
+            // 設定アプリを開く
+            if let url = URL(string: UIApplication.openSettingsURLString) {
+                await MainActor.run {
+                    UIApplication.shared.open(url)
+                }
+            }
+        }
+    }
+    
+    // MARK: - 設定更新
+    private func updatePushEnabled(_ value: Bool) async {
+        do {
+            _ = try await PushNotificationManager.shared.updateNotificationSettings(pushEnabled: value)
+            
+            // プッシュ通知をONにした場合、許可をリクエスト
+            if value && !isNotificationAuthorized {
+                await requestNotificationPermission()
+            }
+        } catch {
+            print("設定更新エラー: \(error)")
+        }
+    }
+    
+    private func updateNotifyOnStolen(_ value: Bool) async {
+        do {
+            _ = try await PushNotificationManager.shared.updateNotificationSettings(notifyOnStolen: value)
+        } catch {
+            print("設定更新エラー: \(error)")
+        }
+    }
+    
+    private func updateNotifyOnAttempts(_ value: Bool) async {
+        do {
+            _ = try await PushNotificationManager.shared.updateNotificationSettings(notifyOnAttempts: value)
+        } catch {
+            print("設定更新エラー: \(error)")
         }
     }
     

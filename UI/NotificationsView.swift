@@ -1,9 +1,9 @@
 import SwiftUI
 
 struct NotificationsView: View {
-    @Environment(\.dismiss) private var dismiss
+    @EnvironmentObject var sessionStore: SessionStore
     @State private var notifications: [AppNotification] = []
-    @State private var isLoading = false
+    @State private var isLoading = true
     
     let service = MessageService()
     
@@ -19,131 +19,231 @@ struct NotificationsView: View {
     )
 
     var body: some View {
-        NavigationStack {
-            ZStack {
-                Color.white.ignoresSafeArea()
-                
+        ScrollView {
+            LazyVStack(spacing: 0) {
                 if isLoading {
                     ProgressView()
+                        .padding(.top, 50)
                 } else if notifications.isEmpty {
-                    emptyView
+                    emptyState
                 } else {
-                    notificationList
-                }
-            }
-            .navigationTitle("アクティビティ")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button("完了") {
-                        dismiss()
+                    // 未読セクション
+                    if !unreadNotifications.isEmpty {
+                        sectionHeader("新着")
+                        ForEach(unreadNotifications) { notification in
+                            notificationRow(notification)
+                        }
                     }
-                    .fontWeight(.semibold)
+                    
+                    // 既読セクション
+                    if !readNotifications.isEmpty {
+                        sectionHeader("以前")
+                        ForEach(readNotifications) { notification in
+                            notificationRow(notification)
+                        }
+                    }
                 }
             }
-            .task {
-                isLoading = true
-                do {
-                    notifications = try await service.fetchNotifications()
-                } catch {
-                    print("Notification error: \(error)")
+        }
+        .background(Color.white)
+        .navigationTitle("アクティビティ")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            if !notifications.isEmpty && !unreadNotifications.isEmpty {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button("すべて既読") {
+                        Task { await markAllAsRead() }
+                    }
+                    .font(.subheadline)
                 }
-                isLoading = false
             }
+        }
+        .task {
+            await loadNotifications()
+        }
+        .refreshable {
+            await loadNotifications()
         }
     }
     
-    // MARK: - Empty View
-    private var emptyView: some View {
+    // MARK: - Computed Properties
+    
+    private var unreadNotifications: [AppNotification] {
+        notifications.filter { !$0.is_read }
+    }
+    
+    private var readNotifications: [AppNotification] {
+        notifications.filter { $0.is_read }
+    }
+    
+    // MARK: - Components
+    
+    private func sectionHeader(_ title: String) -> some View {
+        HStack {
+            Text(title)
+                .font(.subheadline)
+                .fontWeight(.bold)
+                .foregroundColor(.primary)
+            Spacer()
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
+        .background(Color(uiColor: .systemGroupedBackground))
+    }
+    
+    private func notificationRow(_ notification: AppNotification) -> some View {
+        VStack(spacing: 0) {
+            HStack(spacing: 12) {
+                // アイコン
+                ZStack {
+                    Circle()
+                        .fill(notification.color.opacity(0.15))
+                        .frame(width: 50, height: 50)
+                    
+                    Image(systemName: notification.icon)
+                        .font(.system(size: 20))
+                        .foregroundColor(notification.color)
+                }
+                
+                // テキスト
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(notification.title)
+                        .font(.subheadline)
+                        .fontWeight(notification.is_read ? .regular : .bold)
+                        .foregroundColor(.primary)
+                    
+                    Text(notification.body)
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                        .lineLimit(2)
+                    
+                    Text(timeAgo(notification.created_at))
+                        .font(.caption2)
+                        .foregroundColor(.secondary)
+                }
+                
+                Spacer()
+                
+                // 未読マーク
+                if !notification.is_read {
+                    Circle()
+                        .fill(Color.blue)
+                        .frame(width: 8, height: 8)
+                }
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 12)
+            .background(notification.is_read ? Color.white : Color.blue.opacity(0.05))
+            .contentShape(Rectangle())
+            .onTapGesture {
+                Task {
+                    await markAsRead(notification)
+                }
+            }
+            
+            Divider()
+                .padding(.leading, 78)
+        }
+    }
+    
+    private var emptyState: some View {
         VStack(spacing: 16) {
             ZStack {
                 Circle()
-                    .stroke(Color.gray.opacity(0.3), lineWidth: 2)
+                    .stroke(instagramGradient, lineWidth: 2)
                     .frame(width: 80, height: 80)
                 
-                Image(systemName: "heart")
-                    .font(.system(size: 36))
-                    .foregroundColor(.gray)
+                Image(systemName: "bell")
+                    .font(.system(size: 32))
+                    .foregroundStyle(instagramGradient)
             }
             
             Text("アクティビティはありません")
                 .font(.headline)
             
-            Text("投稿への反応があるとここに表示されます")
+            Text("投稿が奪われたり、奪取の試みがあった場合にここに表示されます")
                 .font(.subheadline)
                 .foregroundColor(.secondary)
                 .multilineTextAlignment(.center)
+                .padding(.horizontal, 40)
         }
-        .padding(.horizontal, 40)
+        .padding(.top, 80)
     }
     
-    // MARK: - Notification List
-    private var notificationList: some View {
-        List {
-            ForEach(notifications) { item in
-                notificationRow(item)
-                    .listRowSeparator(.hidden)
-                    .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
-            }
+    // MARK: - Methods
+    
+    private func loadNotifications() async {
+        isLoading = true
+        defer { isLoading = false }
+        
+        do {
+            notifications = try await service.fetchNotifications()
+        } catch {
+            print("Notification error: \(error)")
         }
-        .listStyle(.plain)
     }
     
-    private func notificationRow(_ item: AppNotification) -> some View {
-        HStack(spacing: 12) {
-            // Icon
-            ZStack {
-                Circle()
-                    .fill(instagramGradient)
-                    .frame(width: 44, height: 44)
-                
-                Image(systemName: iconForNotification(item))
-                    .foregroundColor(.white)
+    private func markAsRead(_ notification: AppNotification) async {
+        guard !notification.is_read else { return }
+        
+        do {
+            try await service.markNotificationRead(notification.id)
+            // ローカルで更新
+            if let index = notifications.firstIndex(where: { $0.id == notification.id }) {
+                await MainActor.run {
+                    // 新しい通知オブジェクトを作成して置き換え
+                    var updatedNotifications = notifications
+                    let updated = AppNotification(
+                        id: notification.id,
+                        user_id: notification.user_id,
+                        title: notification.title,
+                        body: notification.body,
+                        type: notification.type,
+                        related_message_id: notification.related_message_id,
+                        is_read: true,
+                        created_at: notification.created_at
+                    )
+                    updatedNotifications[index] = updated
+                    notifications = updatedNotifications
+                }
             }
-            
-            // Content
-            VStack(alignment: .leading, spacing: 4) {
-                Text(item.title)
-                    .font(.subheadline)
-                    .fontWeight(.semibold)
-                
-                Text(item.body)
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-                    .lineLimit(2)
-                
-                Text(formatDate(item.created_at))
-                    .font(.caption2)
-                    .foregroundColor(.secondary)
-            }
-            
-            Spacer()
-            
-            // Unread indicator
-            if !item.is_read {
-                Circle()
-                    .fill(Color.blue)
-                    .frame(width: 8, height: 8)
-            }
+        } catch {
+            print("Mark read error: \(error)")
         }
-        .padding(.vertical, 8)
+    }
+    
+    private func markAllAsRead() async {
+        do {
+            try await service.markAllNotificationsRead()
+            await loadNotifications()
+        } catch {
+            print("Mark all read error: \(error)")
+        }
     }
     
     // MARK: - Helpers
-    private func iconForNotification(_ item: AppNotification) -> String {
-        if item.title.contains("奪") {
-            return "flag.fill"
-        } else if item.title.contains("防衛") {
-            return "shield.fill"
+    
+    private func timeAgo(_ date: Date) -> String {
+        let now = Date()
+        let components = Calendar.current.dateComponents([.minute, .hour, .day, .weekOfYear], from: date, to: now)
+        
+        if let weeks = components.weekOfYear, weeks > 0 {
+            return "\(weeks)週間前"
+        } else if let days = components.day, days > 0 {
+            return "\(days)日前"
+        } else if let hours = components.hour, hours > 0 {
+            return "\(hours)時間前"
+        } else if let minutes = components.minute, minutes > 0 {
+            return "\(minutes)分前"
         } else {
-            return "bell.fill"
+            return "たった今"
         }
     }
-    
-    private func formatDate(_ date: Date) -> String {
-        let formatter = RelativeDateTimeFormatter()
-        formatter.locale = Locale(identifier: "ja_JP")
-        formatter.unitsStyle = .abbreviated
-        return formatter.localizedString(for: date, relativeTo: Date())
+}
+
+#Preview {
+    NavigationStack {
+        NotificationsView()
+            .environmentObject(SessionStore())
     }
 }
